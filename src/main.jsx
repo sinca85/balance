@@ -215,13 +215,14 @@ function ExpenseForm({ month, editingExpense, onSaved, onCancelEdit }) {
         category: editingExpense.category || 'general',
         paymentMethod: payment.paymentMethod,
         creditCard: payment.creditCard || undefined,
+        installments: editingExpense.installments || 1,
         isPaid: Boolean(editingExpense.isPaid),
         isFixed: Boolean(editingExpense.isFixed),
         notes: editingExpense.notes || '',
       })
       return
     }
-    form.setFieldsValue({ date: dayjs(`${month}-01`), category: 'general', paymentMethod: 'efectivo', creditCard: undefined, isPaid: false, isFixed: false })
+    form.setFieldsValue({ date: dayjs(`${month}-01`), category: 'general', paymentMethod: 'efectivo', creditCard: undefined, installments: 1, isPaid: false, isFixed: false })
   }, [month, form, editingExpense])
 
   async function submit(values) {
@@ -232,6 +233,7 @@ function ExpenseForm({ month, editingExpense, onSaved, onCancelEdit }) {
       month: editingExpense?.month || month,
       type: values.isFixed ? 'fixed' : 'variable',
       creditCard: values.paymentMethod === 'credito' ? values.creditCard || '' : '',
+      installments: values.paymentMethod === 'credito' ? Number(values.installments || 1) : 1,
     }
     await api(editingExpense ? `expenses/${editingExpense._id}` : 'expenses', {
       method: editingExpense ? 'PATCH' : 'POST',
@@ -241,7 +243,7 @@ function ExpenseForm({ month, editingExpense, onSaved, onCancelEdit }) {
       }),
     })
     form.resetFields()
-    form.setFieldsValue({ date: dayjs(`${month}-01`), category: 'general', paymentMethod: 'efectivo', creditCard: undefined })
+    form.setFieldsValue({ date: dayjs(`${month}-01`), category: 'general', paymentMethod: 'efectivo', creditCard: undefined, installments: 1 })
     onSaved()
   }
 
@@ -255,7 +257,7 @@ function ExpenseForm({ month, editingExpense, onSaved, onCancelEdit }) {
         layout="vertical"
         form={form}
         onFinish={submit}
-        initialValues={{ category: 'general', paymentMethod: 'efectivo', isPaid: false, isFixed: false, date: dayjs(`${month}-01`) }}
+        initialValues={{ category: 'general', paymentMethod: 'efectivo', installments: 1, isPaid: false, isFixed: false, date: dayjs(`${month}-01`) }}
       >
         <Form.Item label="Detalle" name="title" rules={[{ required: true, message: 'Agrega un detalle' }]}>
           <Input placeholder="Alquiler, supermercado, tarjeta..." />
@@ -287,6 +289,13 @@ function ExpenseForm({ month, editingExpense, onSaved, onCancelEdit }) {
             <Col span={12}>
               <Form.Item label="Tarjeta" name="creditCard" rules={[{ required: true, message: 'Elegi Visa o MasterCard' }]}>
                 <Select options={creditCards} />
+              </Form.Item>
+            </Col>
+          )}
+          {isCredit && (
+            <Col span={12}>
+              <Form.Item label="Cuotas" name="installments">
+                <InputNumber min={1} controls={false} />
               </Form.Item>
             </Col>
           )}
@@ -484,6 +493,7 @@ function ExpenseCard({ expense, reload, onEdit }) {
       <Space wrap className="tag-row">
         <Tag>{expense.date}</Tag>
         {expense.isFixed && <Tag color="gold" icon={<HomeOutlined />}>fijo</Tag>}
+        {expense.installments > 1 && <Tag>Cuota {expense.installmentNumber}/{expense.installments}</Tag>}
         <Tag color={expense.isPaid ? 'green' : 'orange'}>{expense.isPaid ? 'pago' : 'pendiente'}</Tag>
       </Space>
       {expense.notes && <Text className="notes">{expense.notes}</Text>}

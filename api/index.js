@@ -37,6 +37,9 @@ const ExpenseSchema = new mongoose.Schema({
   type: { type: String, enum: ['variable', 'fixed', 'debt', 'income-adjustment'], default: 'variable' },
   paymentMethod: { type: String, default: 'efectivo' },
   creditCard: { type: String, enum: ['', 'visa', 'mastercard'], default: '' },
+  installments: { type: Number, default: 1 },
+  installmentNumber: { type: Number, default: 1 },
+  installmentGroupId: { type: String, default: '' },
   isPaid: { type: Boolean, default: false },
   isFixed: { type: Boolean, default: false },
   fixedDay: { type: Number, default: null },
@@ -123,6 +126,30 @@ function fixedExpenseKey(expense) {
     expense.paymentMethod || 'efectivo',
     expense.creditCard || '',
   ].join('|')
+}
+
+function buildExpenseInstallments(body) {
+  const installments = body.paymentMethod === 'credito' ? Math.max(Number(body.installments || 1), 1) : 1
+  const baseMonth = body.month || getMonth(body.date)
+  const day = String(Number(body.date?.slice(8, 10)) || 1).padStart(2, '0')
+  const installmentGroupId = installments > 1 ? body.installmentGroupId || randomUUID() : ''
+
+  return Array.from({ length: installments }, (_, index) => {
+    const installmentMonth = addMonths(baseMonth, index)
+    const installmentNumber = index + 1
+    return {
+      ...body,
+      title: installments > 1 ? `${body.title} (${installmentNumber}/${installments})` : body.title,
+      date: `${installmentMonth}-${day}`,
+      month: installmentMonth,
+      amount: Number(body.amount || 0),
+      installments,
+      installmentNumber,
+      installmentGroupId,
+      fixedDay: body.fixedDay || Number(day) || null,
+      isPaid: installmentNumber === 1 ? Boolean(body.isPaid) : false,
+    }
+  })
 }
 
 function getAverageInstallment(body) {
@@ -387,17 +414,16 @@ async function localHandler(req, res, url, resource, id) {
   if (resource === 'expenses') {
     if (req.method === 'POST') {
       const body = await readBody(req)
-      const expense = {
+      const now = new Date().toISOString()
+      const expenses = buildExpenseInstallments(body).map((expense) => ({
         _id: randomUUID(),
-        ...body,
-        month: body.month || getMonth(body.date),
-        fixedDay: body.fixedDay || Number(body.date?.slice(8, 10)) || null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }
-      db.expenses.push(expense)
+        ...expense,
+        createdAt: now,
+        updatedAt: now,
+      }))
+      db.expenses.push(...expenses)
       await writeLocalDb(db)
-      return send(res, 201, expense)
+      return send(res, 201, { created: expenses, expense: expenses[0] })
     }
     if (req.method === 'PATCH' && id) {
       const expense = db.expenses.find((item) => item._id === id)
@@ -500,9 +526,9 @@ async function handler(req, res) {
     if (resource === 'expenses') {
       if (req.method === 'POST') {
         const body = await readBody(req)
-        const payload = { ...body, month: body.month || getMonth(body.date), fixedDay: body.fixedDay || Number(body.date?.slice(8, 10)) || null }
-        const expense = await Expense.create(payload)
-        return send(res, 201, expense)
+        const payloads = buildExpenseInstallments(body)
+        const expenses = await Expense.insertMany(payloads)
+        return send(res, 201, { created: expenses, expense: expenses[0] })
       }
       if (req.method === 'PATCH' && id) {
         const body = await readBody(req)
