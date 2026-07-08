@@ -465,7 +465,14 @@ async function handler(req, res) {
     const id = parts[1]
 
     if (resource === 'health') return send(res, 200, { ok: true })
-    if (!process.env.MONGODB_URI) return localHandler(req, res, url, resource, id)
+    if (!process.env.MONGODB_URI) {
+      if (process.env.VERCEL) {
+        return send(res, 500, {
+          error: 'Missing MONGODB_URI. Configure MONGODB_URI in Vercel environment variables.',
+        })
+      }
+      return localHandler(req, res, url, resource, id)
+    }
 
     await connectDb()
 
