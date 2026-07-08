@@ -3,8 +3,8 @@ import { createServer as createViteServer } from 'vite'
 import apiHandler from './api/index.js'
 
 const port = Number(process.env.PORT || 5173)
-const authUser = process.env.BASIC_AUTH_USER || 'santi'
-const authPass = process.env.BASIC_AUTH_PASS || 'sava9379'
+const authUser = process.env.APP_AUTH_USER || process.env.BASIC_AUTH_USER || 'santi'
+const authPass = process.env.APP_AUTH_PASSWORD || process.env.BASIC_AUTH_PASS || 'sava9379'
 
 function isAuthorized(req) {
   const header = req.headers.authorization || ''

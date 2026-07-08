@@ -1,5 +1,5 @@
-const authUser = process.env.BASIC_AUTH_USER || 'santi'
-const authPass = process.env.BASIC_AUTH_PASS || 'sava9379'
+const authUser = process.env.APP_AUTH_USER || process.env.BASIC_AUTH_USER || 'santi'
+const authPass = process.env.APP_AUTH_PASSWORD || process.env.BASIC_AUTH_PASS || 'sava9379'
 
 function isAuthorized(request) {
   const header = request.headers.get('authorization') || ''
