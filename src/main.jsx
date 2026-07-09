@@ -33,6 +33,7 @@ import {
   EditOutlined,
   HomeOutlined,
   PlusOutlined,
+  ReloadOutlined,
   WalletOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
@@ -621,6 +622,7 @@ function AppContent() {
   const [entryModalOpen, setEntryModalOpen] = useState(false)
   const [entryKind, setEntryKind] = useState('expense')
   const [entryMode, setEntryMode] = useState('create')
+  const [refreshing, setRefreshing] = useState(false)
 
   async function load() {
     try {
@@ -628,6 +630,15 @@ function AppContent() {
       setData(await api(`dashboard?month=${month}`))
     } catch (e) {
       setError(e.message)
+    }
+  }
+
+  async function refreshDashboard() {
+    try {
+      setRefreshing(true)
+      await load()
+    } finally {
+      setRefreshing(false)
     }
   }
 
@@ -702,7 +713,19 @@ function AppContent() {
     <main>
       <header className="hero">
         <Space orientation="vertical" size={6}>
-          <Tag color="blue" icon={<CalendarOutlined />}>Control mensual</Tag>
+          <Space align="center">
+            <Tag color="blue" icon={<CalendarOutlined />}>Control mensual</Tag>
+            <Tooltip title="Actualizar">
+              <Button
+                shape="circle"
+                size="small"
+                icon={<ReloadOutlined />}
+                loading={refreshing}
+                onClick={refreshDashboard}
+                aria-label="Actualizar"
+              />
+            </Tooltip>
+          </Space>
           <Title>Balance</Title>
           <Text type="secondary">Sueldo, alimentos, gastos, fijos, prestamos y saldo estimado en una sola vista.</Text>
         </Space>
