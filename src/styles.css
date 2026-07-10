@@ -67,7 +67,7 @@ main {
 
 .stat-card .ant-card-body {
   display: flex;
-  height: 116px;
+  height: 120px;
   flex-direction: column;
   justify-content: center;
   overflow: hidden;
