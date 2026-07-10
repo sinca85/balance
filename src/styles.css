@@ -23,16 +23,11 @@ main {
 }
 
 .hero {
-  margin-bottom: 18px;
+  margin-bottom: 12px;
 }
 
 .hero .ant-typography {
   margin: 0;
-}
-
-.hero h1.ant-typography {
-  font-size: clamp(34px, 5vw, 58px);
-  line-height: 1;
 }
 
 .toolbar-card,

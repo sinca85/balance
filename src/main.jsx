@@ -756,7 +756,6 @@ function AppContent() {
               />
             </Tooltip>
           </Space>
-          <Title>Balance</Title>
           <Text type="secondary">Sueldo, alimentos, gastos, fijos, prestamos y saldo estimado en una sola vista.</Text>
         </Space>
       </header>
