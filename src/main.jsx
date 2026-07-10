@@ -109,7 +109,7 @@ function StatTile({ icon, label, value, hint }) {
   return (
     <Card className="stat-card" variant="borderless">
       <Statistic title={label} value={value} prefix={icon} formatter={(v) => money.format(v)} />
-      {hint && <Text type="secondary">{hint}</Text>}
+      {hint && <Text className="stat-hint" type="secondary">{hint}</Text>}
     </Card>
   )
 }

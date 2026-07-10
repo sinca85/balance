@@ -66,7 +66,43 @@ main {
 }
 
 .stat-card .ant-card-body {
-  min-height: 116px;
+  display: flex;
+  height: 116px;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  padding-top: 18px;
+  padding-bottom: 18px;
+}
+
+.stat-card .ant-statistic {
+  min-width: 0;
+}
+
+.stat-card .ant-statistic-title {
+  margin-bottom: 8px;
+}
+
+.stat-card .ant-statistic-content {
+  overflow: hidden;
+  font-size: 24px;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stat-card .ant-statistic-content-prefix {
+  margin-inline-end: 6px;
+}
+
+.stat-hint {
+  display: block;
+  margin-top: 8px;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .category-summary {
