@@ -773,9 +773,17 @@ function AppContent() {
 
       <Row gutter={[12, 12]} className="stats">
         <Col xs={24} sm={12} lg={4}><StatTile icon={<DollarOutlined />} label="Sueldo" value={data?.summary?.salary || 0} /></Col>
-        <Col xs={24} sm={12} lg={5}><StatTile icon={<WalletOutlined />} label={`Alimentos (${data?.summary?.foodPercent ?? 30}%)`} value={data?.summary?.foodAmount || 0} /></Col>
-        <Col xs={24} sm={12} lg={5}><StatTile icon={<CheckCircleOutlined />} label="Pagado" value={data?.summary?.paidTotal || 0} /></Col>
-        <Col xs={24} sm={12} lg={5}>
+        <Col xs={24} sm={12} lg={4}><StatTile icon={<WalletOutlined />} label={`Alimentos (${data?.summary?.foodPercent ?? 30}%)`} value={data?.summary?.foodAmount || 0} /></Col>
+        <Col xs={24} sm={12} lg={4}><StatTile icon={<CreditCardOutlined />} label="Tarjeta" value={data?.summary?.currentCreditExpenses || 0} /></Col>
+        <Col xs={24} sm={12} lg={4}>
+          <StatTile
+            icon={<CheckCircleOutlined />}
+            label="Pagado"
+            value={data?.summary?.paidTotal || 0}
+            hint={`Tarjeta: ${money.format(data?.summary?.paidCardStatementExpenses || 0)}`}
+          />
+        </Col>
+        <Col xs={24} sm={12} lg={4}>
           <StatTile
             icon={<CreditCardOutlined />}
             label="Pendiente"
@@ -783,7 +791,7 @@ function AppContent() {
             hint={`Sin alquiler: ${money.format(data?.summary?.pendingTotalWithoutRent || 0)}`}
           />
         </Col>
-        <Col xs={24} sm={24} lg={5}><StatTile icon={<WalletOutlined />} label="Saldo estimado" value={data?.summary?.estimatedBalance || 0} /></Col>
+        <Col xs={24} sm={24} lg={4}><StatTile icon={<WalletOutlined />} label="Saldo estimado" value={data?.summary?.estimatedBalance || 0} /></Col>
       </Row>
 
       <CategorySummary

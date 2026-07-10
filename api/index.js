@@ -319,6 +319,14 @@ function categoryTotalsForExpenses(expenses) {
   return totals
 }
 
+function isCardStatementExpense(expense) {
+  return String(expense.title || '').toLowerCase().includes('tarjeta')
+}
+
+function isCreditExpense(expense) {
+  return expense.paymentMethod === 'credito' || expense.paymentMethod === 'visa' || expense.paymentMethod === 'mastercard' || Boolean(expense.creditCard)
+}
+
 async function getDashboard(month) {
   await ensureFixedExpensesForMonth(month)
   const [config, expenses, allLoans] = await Promise.all([
@@ -336,6 +344,12 @@ async function getDashboard(month) {
     .filter((e) => !e.isPaid && !String(e.title || '').includes('Alquiler'))
     .reduce((sum, e) => sum + Number(e.amount || 0), 0)
   const categoryTotals = categoryTotalsForExpenses(expenses)
+  const paidCardStatementExpenses = expenses
+    .filter((e) => e.isPaid && isCardStatementExpense(e))
+    .reduce((sum, e) => sum + Number(e.amount || 0), 0)
+  const currentCreditExpenses = expenses
+    .filter((e) => isCreditExpense(e) && !isCardStatementExpense(e))
+    .reduce((sum, e) => sum + Number(e.amount || 0), 0)
   const loanPaid = loans.filter((l) => l.isPaid).reduce((sum, l) => sum + Number(l.amountThisMonthPesos || 0), 0)
   const loanPending = loans.filter((l) => !l.isPaid).reduce((sum, l) => sum + Number(l.amountThisMonthPesos || 0), 0)
   const committed = foodAmount + paidExpenses + pendingExpenses + loanPaid + loanPending
@@ -347,6 +361,8 @@ async function getDashboard(month) {
       foodPercent,
       foodAmount,
       paidExpenses,
+      paidCardStatementExpenses,
+      currentCreditExpenses,
       pendingExpenses,
       pendingExpensesWithoutRent,
       loanPaid,
@@ -377,6 +393,12 @@ async function getLocalDashboard(db, month) {
     .filter((e) => !e.isPaid && !String(e.title || '').includes('Alquiler'))
     .reduce((sum, e) => sum + Number(e.amount || 0), 0)
   const categoryTotals = categoryTotalsForExpenses(expenses)
+  const paidCardStatementExpenses = expenses
+    .filter((e) => e.isPaid && isCardStatementExpense(e))
+    .reduce((sum, e) => sum + Number(e.amount || 0), 0)
+  const currentCreditExpenses = expenses
+    .filter((e) => isCreditExpense(e) && !isCardStatementExpense(e))
+    .reduce((sum, e) => sum + Number(e.amount || 0), 0)
   const loanPaid = loans.filter((l) => l.isPaid).reduce((sum, l) => sum + Number(l.amountThisMonthPesos || 0), 0)
   const loanPending = loans.filter((l) => !l.isPaid).reduce((sum, l) => sum + Number(l.amountThisMonthPesos || 0), 0)
   const committed = foodAmount + paidExpenses + pendingExpenses + loanPaid + loanPending
@@ -389,6 +411,8 @@ async function getLocalDashboard(db, month) {
       foodPercent,
       foodAmount,
       paidExpenses,
+      paidCardStatementExpenses,
+      currentCreditExpenses,
       pendingExpenses,
       pendingExpensesWithoutRent,
       loanPaid,
