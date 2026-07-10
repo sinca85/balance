@@ -90,6 +90,26 @@ function formatLoanAmount(value, loanUnit = 'ars') {
   return money.format(value || 0)
 }
 
+function expensePaidAmount(expense) {
+  const amount = Number(expense?.amount || 0)
+  if (expense?.paidAmount !== undefined && expense?.paidAmount !== null) {
+    return Math.min(Math.max(Number(expense.paidAmount || 0), 0), amount)
+  }
+  return expense?.isPaid ? amount : 0
+}
+
+function expensePendingAmount(expense) {
+  return Math.max(Number(expense?.amount || 0) - expensePaidAmount(expense), 0)
+}
+
+function expensePaymentStatus(expense) {
+  const paid = expensePaidAmount(expense)
+  const amount = Number(expense?.amount || 0)
+  if (amount > 0 && paid >= amount) return 'paid'
+  if (paid > 0) return 'partial'
+  return 'pending'
+}
+
 function currentMonth() {
   return new Date().toISOString().slice(0, 7)
 }
@@ -244,7 +264,7 @@ function ExpenseForm({ month, editingExpense, onSaved, onCancelEdit }) {
         paymentMethod: payment.paymentMethod,
         creditCard: payment.creditCard || undefined,
         installments: editingExpense.installments || 1,
-        isPaid: Boolean(editingExpense.isPaid),
+        isPaid: expensePaymentStatus(editingExpense) === 'paid',
         isFixed: Boolean(editingExpense.isFixed),
         notes: editingExpense.notes || '',
       })
@@ -254,6 +274,8 @@ function ExpenseForm({ month, editingExpense, onSaved, onCancelEdit }) {
   }, [month, form, editingExpense])
 
   async function submit(values) {
+    const currentPaidAmount = editingExpense ? expensePaidAmount(editingExpense) : 0
+    const shouldKeepPartialPayment = editingExpense && expensePaymentStatus(editingExpense) === 'partial'
     const payload = {
       ...values,
       amount: Number(values.amount),
@@ -262,6 +284,7 @@ function ExpenseForm({ month, editingExpense, onSaved, onCancelEdit }) {
       type: values.isFixed ? 'fixed' : 'variable',
       creditCard: values.paymentMethod === 'credito' ? values.creditCard || '' : '',
       installments: values.paymentMethod === 'credito' ? Number(values.installments || 1) : 1,
+      paidAmount: values.isPaid ? Number(values.amount) : (shouldKeepPartialPayment ? currentPaidAmount : 0),
     }
     await api(editingExpense ? `expenses/${editingExpense._id}` : 'expenses', {
       method: editingExpense ? 'PATCH' : 'POST',
@@ -481,9 +504,19 @@ function LoanForm({ month, editingLoan, onSaved, onCancelEdit }) {
 
 function ExpenseCard({ expense, reload, onEdit }) {
   const payment = normalizeLegacyPayment(expense)
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false)
+  const [paymentForm] = Form.useForm()
+  const paidAmount = expensePaidAmount(expense)
+  const pendingAmount = expensePendingAmount(expense)
+  const paymentStatus = expensePaymentStatus(expense)
 
-  async function toggle() {
-    await api(`expenses/${expense._id}`, { method: 'PATCH', body: JSON.stringify({ isPaid: !expense.isPaid }) })
+  useEffect(() => {
+    if (paymentModalOpen) paymentForm.setFieldsValue({ paidAmount })
+  }, [paymentModalOpen, paymentForm, paidAmount])
+
+  async function savePayment(values) {
+    await api(`expenses/${expense._id}`, { method: 'PATCH', body: JSON.stringify({ paidAmount: Number(values.paidAmount || 0) }) })
+    setPaymentModalOpen(false)
     reload()
   }
 
@@ -494,14 +527,14 @@ function ExpenseCard({ expense, reload, onEdit }) {
 
   return (
     <Card
-      className={expense.isPaid ? 'item-card item-card-paid' : 'item-card'}
+      className={paymentStatus === 'paid' ? 'item-card item-card-paid' : 'item-card'}
       variant="borderless"
       actions={[
         <Button type="text" icon={<EditOutlined />} onClick={() => onEdit(expense)}>
           Editar
         </Button>,
-        <Button type="text" icon={<CheckCircleOutlined />} onClick={toggle}>
-          {expense.isPaid ? 'Marcar pendiente' : 'Marcar pago'}
+        <Button type="text" icon={<CheckCircleOutlined />} onClick={() => setPaymentModalOpen(true)}>
+          Registrar pago
         </Button>,
         <Button type="text" danger icon={<DeleteOutlined />} onClick={remove}>
           Borrar
@@ -522,9 +555,38 @@ function ExpenseCard({ expense, reload, onEdit }) {
         <Tag>{expense.date}</Tag>
         {expense.isFixed && <Tag color="gold" icon={<HomeOutlined />}>fijo</Tag>}
         {expense.installments > 1 && <Tag>Cuota {expense.installmentNumber}/{expense.installments}</Tag>}
-        <Tag color={expense.isPaid ? 'green' : 'orange'}>{expense.isPaid ? 'pago' : 'pendiente'}</Tag>
+        <Tag color={paymentStatus === 'paid' ? 'green' : paymentStatus === 'partial' ? 'blue' : 'orange'}>
+          {paymentStatus === 'paid' ? 'pago' : paymentStatus === 'partial' ? 'parcial' : 'pendiente'}
+        </Tag>
       </Space>
+      {paidAmount > 0 && paymentStatus !== 'paid' && (
+        <Flex className="payment-line" justify="space-between" gap={10}>
+          <Text type="secondary">Pagado: <strong>{money.format(paidAmount)}</strong></Text>
+          <Text type="secondary">Falta: <strong>{money.format(pendingAmount)}</strong></Text>
+        </Flex>
+      )}
       {expense.notes && <Text className="notes">{expense.notes}</Text>}
+      <Modal
+        title={`Registrar pago - ${expense.title}`}
+        open={paymentModalOpen}
+        onCancel={() => setPaymentModalOpen(false)}
+        footer={null}
+        destroyOnHidden
+      >
+        <Form layout="vertical" form={paymentForm} onFinish={savePayment}>
+          <Form.Item label="Monto pagado" name="paidAmount" rules={[{ required: true, message: 'Ingresa el monto pagado' }]}>
+            <InputNumber min={0} max={Number(expense.amount || 0)} controls={false} prefix="$" />
+          </Form.Item>
+          <Flex gap={8} justify="space-between" align="center">
+            <Text type="secondary">Total: {money.format(expense.amount || 0)}</Text>
+            <Space>
+              <Button onClick={() => paymentForm.setFieldsValue({ paidAmount: 0 })}>Limpiar</Button>
+              <Button onClick={() => paymentForm.setFieldsValue({ paidAmount: Number(expense.amount || 0) })}>Todo</Button>
+              <Button type="primary" htmlType="submit">Guardar</Button>
+            </Space>
+          </Flex>
+        </Form>
+      </Modal>
     </Card>
   )
 }
@@ -697,8 +759,9 @@ function AppContent() {
       } else if (paymentMethod !== 'all' && payment.paymentMethod !== paymentMethod) {
         return false
       }
-      if (status === 'paid' && !e.isPaid) return false
-      if (status === 'pending' && e.isPaid) return false
+      const paymentStatus = expensePaymentStatus(e)
+      if (status === 'paid' && paymentStatus !== 'paid') return false
+      if (status === 'pending' && paymentStatus === 'paid') return false
       return true
     })
     .sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0)), [data, category, paymentMethod, status])

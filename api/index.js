@@ -41,6 +41,7 @@ const ExpenseSchema = new mongoose.Schema({
   installments: { type: Number, default: 1 },
   installmentNumber: { type: Number, default: 1 },
   installmentGroupId: { type: String, default: '' },
+  paidAmount: { type: Number, default: 0 },
   isPaid: { type: Boolean, default: false },
   isFixed: { type: Boolean, default: false },
   fixedDay: { type: Number, default: null },
@@ -129,6 +130,32 @@ function fixedExpenseKey(expense) {
   ].join('|')
 }
 
+function clampAmount(value, min, max) {
+  return Math.min(Math.max(Number(value || 0), min), max)
+}
+
+function expensePaidAmount(expense) {
+  const amount = Number(expense.amount || 0)
+  if (expense.paidAmount !== undefined && expense.paidAmount !== null) return clampAmount(expense.paidAmount, 0, amount)
+  return expense.isPaid ? amount : 0
+}
+
+function expensePendingAmount(expense) {
+  return Math.max(Number(expense.amount || 0) - expensePaidAmount(expense), 0)
+}
+
+function normalizeExpensePayment(expense) {
+  const amount = Number(expense.amount || 0)
+  const paidAmount = expense.paidAmount !== undefined && expense.paidAmount !== null
+    ? clampAmount(expense.paidAmount, 0, amount)
+    : (expense.isPaid ? amount : 0)
+  return {
+    ...expense,
+    paidAmount,
+    isPaid: amount === 0 ? Boolean(expense.isPaid) : paidAmount >= amount,
+  }
+}
+
 function buildExpenseInstallments(body) {
   const installments = body.paymentMethod === 'credito' ? Math.max(Number(body.installments || 1), 1) : 1
   const baseMonth = body.month || getMonth(body.date)
@@ -138,18 +165,21 @@ function buildExpenseInstallments(body) {
   return Array.from({ length: installments }, (_, index) => {
     const installmentMonth = addMonths(baseMonth, index)
     const installmentNumber = index + 1
-    return {
+    const amount = Number(body.amount || 0)
+    const paidAmount = installmentNumber === 1 ? body.paidAmount ?? (body.isPaid ? amount : 0) : 0
+    return normalizeExpensePayment({
       ...body,
       title: installments > 1 ? `${body.title} (${installmentNumber}/${installments})` : body.title,
       date: `${installmentMonth}-${day}`,
       month: installmentMonth,
-      amount: Number(body.amount || 0),
+      amount,
       installments,
       installmentNumber,
       installmentGroupId,
       fixedDay: body.fixedDay || Number(day) || null,
+      paidAmount,
       isPaid: installmentNumber === 1 ? Boolean(body.isPaid) : false,
-    }
+    })
   })
 }
 
@@ -220,6 +250,7 @@ async function ensureFixedExpensesForMonth(month) {
       type: 'fixed',
       paymentMethod: source.paymentMethod,
       creditCard: source.creditCard || '',
+      paidAmount: 0,
       isPaid: false,
       isFixed: true,
       fixedDay: source.fixedDay || Number(source.date?.slice(8, 10)) || null,
@@ -253,6 +284,7 @@ function ensureLocalFixedExpensesForMonth(db, month) {
       type: 'fixed',
       paymentMethod: source.paymentMethod,
       creditCard: source.creditCard || '',
+      paidAmount: 0,
       isPaid: false,
       isFixed: true,
       fixedDay: source.fixedDay || Number(source.date?.slice(8, 10)) || null,
@@ -338,15 +370,15 @@ async function getDashboard(month) {
   const salary = config?.salary || 0
   const foodPercent = config?.foodPercent ?? 30
   const foodAmount = Math.round(salary * foodPercent / 100)
-  const paidExpenses = expenses.filter((e) => e.isPaid).reduce((sum, e) => sum + Number(e.amount || 0), 0)
-  const pendingExpenses = expenses.filter((e) => !e.isPaid).reduce((sum, e) => sum + Number(e.amount || 0), 0)
+  const paidExpenses = expenses.reduce((sum, e) => sum + expensePaidAmount(e), 0)
+  const pendingExpenses = expenses.reduce((sum, e) => sum + expensePendingAmount(e), 0)
   const pendingExpensesWithoutRent = expenses
-    .filter((e) => !e.isPaid && !String(e.title || '').includes('Alquiler'))
-    .reduce((sum, e) => sum + Number(e.amount || 0), 0)
+    .filter((e) => !String(e.title || '').includes('Alquiler'))
+    .reduce((sum, e) => sum + expensePendingAmount(e), 0)
   const categoryTotals = categoryTotalsForExpenses(expenses)
   const paidCardStatementExpenses = expenses
-    .filter((e) => e.isPaid && isCardStatementExpense(e))
-    .reduce((sum, e) => sum + Number(e.amount || 0), 0)
+    .filter((e) => isCardStatementExpense(e))
+    .reduce((sum, e) => sum + expensePaidAmount(e), 0)
   const currentCreditExpenses = expenses
     .filter((e) => isCreditExpense(e) && !isCardStatementExpense(e))
     .reduce((sum, e) => sum + Number(e.amount || 0), 0)
@@ -387,15 +419,15 @@ async function getLocalDashboard(db, month) {
   const salary = config?.salary || 0
   const foodPercent = config?.foodPercent ?? 30
   const foodAmount = Math.round(salary * foodPercent / 100)
-  const paidExpenses = expenses.filter((e) => e.isPaid).reduce((sum, e) => sum + Number(e.amount || 0), 0)
-  const pendingExpenses = expenses.filter((e) => !e.isPaid).reduce((sum, e) => sum + Number(e.amount || 0), 0)
+  const paidExpenses = expenses.reduce((sum, e) => sum + expensePaidAmount(e), 0)
+  const pendingExpenses = expenses.reduce((sum, e) => sum + expensePendingAmount(e), 0)
   const pendingExpensesWithoutRent = expenses
-    .filter((e) => !e.isPaid && !String(e.title || '').includes('Alquiler'))
-    .reduce((sum, e) => sum + Number(e.amount || 0), 0)
+    .filter((e) => !String(e.title || '').includes('Alquiler'))
+    .reduce((sum, e) => sum + expensePendingAmount(e), 0)
   const categoryTotals = categoryTotalsForExpenses(expenses)
   const paidCardStatementExpenses = expenses
-    .filter((e) => e.isPaid && isCardStatementExpense(e))
-    .reduce((sum, e) => sum + Number(e.amount || 0), 0)
+    .filter((e) => isCardStatementExpense(e))
+    .reduce((sum, e) => sum + expensePaidAmount(e), 0)
   const currentCreditExpenses = expenses
     .filter((e) => isCreditExpense(e) && !isCardStatementExpense(e))
     .reduce((sum, e) => sum + Number(e.amount || 0), 0)
@@ -476,7 +508,8 @@ async function localHandler(req, res, url, resource, id) {
     if (req.method === 'PATCH' && id) {
       const expense = db.expenses.find((item) => item._id === id)
       if (!expense) return send(res, 404, { error: 'Not found' })
-      Object.assign(expense, await readBody(req), { updatedAt: new Date().toISOString() })
+      const body = await readBody(req)
+      Object.assign(expense, normalizeExpensePayment({ ...expense, ...body }), { updatedAt: new Date().toISOString() })
       await writeLocalDb(db)
       return send(res, 200, expense)
     }
@@ -580,7 +613,9 @@ async function handler(req, res) {
       }
       if (req.method === 'PATCH' && id) {
         const body = await readBody(req)
-        const expense = await Expense.findByIdAndUpdate(id, { $set: body }, { new: true }).lean()
+        const current = await Expense.findById(id).lean()
+        if (!current) return send(res, 404, { error: 'Not found' })
+        const expense = await Expense.findByIdAndUpdate(id, { $set: normalizeExpensePayment({ ...current, ...body }) }, { new: true }).lean()
         return send(res, 200, expense)
       }
       if (req.method === 'DELETE' && id) {
@@ -646,6 +681,7 @@ async function handler(req, res) {
           type: 'fixed',
           paymentMethod: e.paymentMethod,
           creditCard: e.creditCard || '',
+          paidAmount: 0,
           isPaid: false,
           isFixed: true,
           fixedDay: e.fixedDay,

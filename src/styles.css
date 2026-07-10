@@ -178,6 +178,14 @@ main {
   margin-top: 2px;
 }
 
+.payment-line {
+  font-size: 12px;
+}
+
+.payment-line strong {
+  color: #1f2933;
+}
+
 .notes {
   display: block;
   color: #53606d;
