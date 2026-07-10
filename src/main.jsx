@@ -29,6 +29,7 @@ import {
   CheckCircleOutlined,
   CreditCardOutlined,
   DeleteOutlined,
+  DownOutlined,
   DollarOutlined,
   EditOutlined,
   HomeOutlined,
@@ -110,6 +111,32 @@ function StatTile({ icon, label, value, hint }) {
       <Statistic title={label} value={value} prefix={icon} formatter={(v) => money.format(v)} />
       {hint && <Text type="secondary">{hint}</Text>}
     </Card>
+  )
+}
+
+function CategorySummary({ open, onToggle, totals = {} }) {
+  return (
+    <section className="category-summary" aria-label="Resumen por categorias">
+      <Button
+        className="category-summary-toggle"
+        type="text"
+        size="small"
+        icon={<DownOutlined rotate={open ? 180 : 0} />}
+        onClick={onToggle}
+      >
+        Categorias
+      </Button>
+      {open && (
+        <div className="category-summary-row">
+          {categories.map((item) => (
+            <span className="category-summary-pill" key={item.value}>
+              <span>{item.label}</span>
+              <strong>{money.format(totals[item.value] || 0)}</strong>
+            </span>
+          ))}
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -623,6 +650,7 @@ function AppContent() {
   const [entryKind, setEntryKind] = useState('expense')
   const [entryMode, setEntryMode] = useState('create')
   const [refreshing, setRefreshing] = useState(false)
+  const [showCategorySummary, setShowCategorySummary] = useState(false)
 
   async function load() {
     try {
@@ -757,6 +785,12 @@ function AppContent() {
         </Col>
         <Col xs={24} sm={24} lg={5}><StatTile icon={<WalletOutlined />} label="Saldo estimado" value={data?.summary?.estimatedBalance || 0} /></Col>
       </Row>
+
+      <CategorySummary
+        open={showCategorySummary}
+        onToggle={() => setShowCategorySummary((value) => !value)}
+        totals={data?.summary?.categoryTotals}
+      />
 
       <EntryModal
         open={entryModalOpen}

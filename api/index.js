@@ -4,6 +4,7 @@ import path from 'node:path'
 import mongoose from 'mongoose'
 
 const localDbPath = path.join(process.cwd(), '.data', 'local-db.json')
+const expenseCategories = ['general', 'vivienda', 'comida', 'transporte', 'hijos', 'tarjeta', 'salud', 'ocio']
 
 let cached = global.mongooseConnection
 if (!cached) cached = global.mongooseConnection = { conn: null, promise: null }
@@ -309,6 +310,15 @@ function loanForMonth(loan, month) {
   }
 }
 
+function categoryTotalsForExpenses(expenses) {
+  const totals = Object.fromEntries(expenseCategories.map((category) => [category, 0]))
+  for (const expense of expenses) {
+    const category = expenseCategories.includes(expense.category) ? expense.category : 'general'
+    totals[category] += Number(expense.amount || 0)
+  }
+  return totals
+}
+
 async function getDashboard(month) {
   await ensureFixedExpensesForMonth(month)
   const [config, expenses, allLoans] = await Promise.all([
@@ -325,6 +335,7 @@ async function getDashboard(month) {
   const pendingExpensesWithoutRent = expenses
     .filter((e) => !e.isPaid && !String(e.title || '').includes('Alquiler'))
     .reduce((sum, e) => sum + Number(e.amount || 0), 0)
+  const categoryTotals = categoryTotalsForExpenses(expenses)
   const loanPaid = loans.filter((l) => l.isPaid).reduce((sum, l) => sum + Number(l.amountThisMonthPesos || 0), 0)
   const loanPending = loans.filter((l) => !l.isPaid).reduce((sum, l) => sum + Number(l.amountThisMonthPesos || 0), 0)
   const committed = foodAmount + paidExpenses + pendingExpenses + loanPaid + loanPending
@@ -345,6 +356,7 @@ async function getDashboard(month) {
       paidTotal: paidExpenses + loanPaid,
       pendingTotal: pendingExpenses + loanPending,
       pendingTotalWithoutRent: pendingExpensesWithoutRent + loanPending,
+      categoryTotals,
     },
     expenses,
     loans,
@@ -364,6 +376,7 @@ async function getLocalDashboard(db, month) {
   const pendingExpensesWithoutRent = expenses
     .filter((e) => !e.isPaid && !String(e.title || '').includes('Alquiler'))
     .reduce((sum, e) => sum + Number(e.amount || 0), 0)
+  const categoryTotals = categoryTotalsForExpenses(expenses)
   const loanPaid = loans.filter((l) => l.isPaid).reduce((sum, l) => sum + Number(l.amountThisMonthPesos || 0), 0)
   const loanPending = loans.filter((l) => !l.isPaid).reduce((sum, l) => sum + Number(l.amountThisMonthPesos || 0), 0)
   const committed = foodAmount + paidExpenses + pendingExpenses + loanPaid + loanPending
@@ -385,6 +398,7 @@ async function getLocalDashboard(db, month) {
       paidTotal: paidExpenses + loanPaid,
       pendingTotal: pendingExpenses + loanPending,
       pendingTotalWithoutRent: pendingExpensesWithoutRent + loanPending,
+      categoryTotals,
     },
     expenses,
     loans,
