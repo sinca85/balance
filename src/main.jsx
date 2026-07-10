@@ -687,19 +687,21 @@ function AppContent() {
     }
   }, [month])
 
-  const filteredExpenses = useMemo(() => (data?.expenses || []).filter((e) => {
-    const payment = normalizeLegacyPayment(e)
-    if (category !== 'all' && e.category !== category) return false
-    if (paymentMethod.includes(':')) {
-      const [method, card] = paymentMethod.split(':')
-      if (payment.paymentMethod !== method || payment.creditCard !== card) return false
-    } else if (paymentMethod !== 'all' && payment.paymentMethod !== paymentMethod) {
-      return false
-    }
-    if (status === 'paid' && !e.isPaid) return false
-    if (status === 'pending' && e.isPaid) return false
-    return true
-  }), [data, category, paymentMethod, status])
+  const filteredExpenses = useMemo(() => (data?.expenses || [])
+    .filter((e) => {
+      const payment = normalizeLegacyPayment(e)
+      if (category !== 'all' && e.category !== category) return false
+      if (paymentMethod.includes(':')) {
+        const [method, card] = paymentMethod.split(':')
+        if (payment.paymentMethod !== method || payment.creditCard !== card) return false
+      } else if (paymentMethod !== 'all' && payment.paymentMethod !== paymentMethod) {
+        return false
+      }
+      if (status === 'paid' && !e.isPaid) return false
+      if (status === 'pending' && e.isPaid) return false
+      return true
+    })
+    .sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0)), [data, category, paymentMethod, status])
 
   function openCreate() {
     setEntryMode('create')
@@ -827,7 +829,7 @@ function AppContent() {
               {filteredExpenses.length ? (
                 <Row gutter={[14, 14]}>
                   {filteredExpenses.map((expense) => (
-                    <Col xs={24} md={12} xl={8} key={expense._id}>
+                    <Col xs={24} md={12} xl={6} key={expense._id}>
                       <ExpenseCard expense={expense} reload={load} onEdit={openEditExpense} />
                     </Col>
                   ))}
