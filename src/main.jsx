@@ -747,7 +747,14 @@ function AppContent() {
         <Col xs={24} sm={12} lg={4}><StatTile icon={<DollarOutlined />} label="Sueldo" value={data?.summary?.salary || 0} /></Col>
         <Col xs={24} sm={12} lg={5}><StatTile icon={<WalletOutlined />} label={`Alimentos (${data?.summary?.foodPercent ?? 30}%)`} value={data?.summary?.foodAmount || 0} /></Col>
         <Col xs={24} sm={12} lg={5}><StatTile icon={<CheckCircleOutlined />} label="Pagado" value={data?.summary?.paidTotal || 0} /></Col>
-        <Col xs={24} sm={12} lg={5}><StatTile icon={<CreditCardOutlined />} label="Pendiente" value={data?.summary?.pendingTotal || 0} /></Col>
+        <Col xs={24} sm={12} lg={5}>
+          <StatTile
+            icon={<CreditCardOutlined />}
+            label="Pendiente"
+            value={data?.summary?.pendingTotal || 0}
+            hint={`Sin alquiler: ${money.format(data?.summary?.pendingTotalWithoutRent || 0)}`}
+          />
+        </Col>
         <Col xs={24} sm={24} lg={5}><StatTile icon={<WalletOutlined />} label="Saldo estimado" value={data?.summary?.estimatedBalance || 0} /></Col>
       </Row>
 

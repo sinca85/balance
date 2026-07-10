@@ -322,6 +322,9 @@ async function getDashboard(month) {
   const foodAmount = Math.round(salary * foodPercent / 100)
   const paidExpenses = expenses.filter((e) => e.isPaid).reduce((sum, e) => sum + Number(e.amount || 0), 0)
   const pendingExpenses = expenses.filter((e) => !e.isPaid).reduce((sum, e) => sum + Number(e.amount || 0), 0)
+  const pendingExpensesWithoutRent = expenses
+    .filter((e) => !e.isPaid && !String(e.title || '').includes('Alquiler'))
+    .reduce((sum, e) => sum + Number(e.amount || 0), 0)
   const loanPaid = loans.filter((l) => l.isPaid).reduce((sum, l) => sum + Number(l.amountThisMonthPesos || 0), 0)
   const loanPending = loans.filter((l) => !l.isPaid).reduce((sum, l) => sum + Number(l.amountThisMonthPesos || 0), 0)
   const committed = foodAmount + paidExpenses + pendingExpenses + loanPaid + loanPending
@@ -334,12 +337,14 @@ async function getDashboard(month) {
       foodAmount,
       paidExpenses,
       pendingExpenses,
+      pendingExpensesWithoutRent,
       loanPaid,
       loanPending,
       committed,
       estimatedBalance: salary - committed,
       paidTotal: paidExpenses + loanPaid,
       pendingTotal: pendingExpenses + loanPending,
+      pendingTotalWithoutRent: pendingExpensesWithoutRent + loanPending,
     },
     expenses,
     loans,
@@ -356,6 +361,9 @@ async function getLocalDashboard(db, month) {
   const foodAmount = Math.round(salary * foodPercent / 100)
   const paidExpenses = expenses.filter((e) => e.isPaid).reduce((sum, e) => sum + Number(e.amount || 0), 0)
   const pendingExpenses = expenses.filter((e) => !e.isPaid).reduce((sum, e) => sum + Number(e.amount || 0), 0)
+  const pendingExpensesWithoutRent = expenses
+    .filter((e) => !e.isPaid && !String(e.title || '').includes('Alquiler'))
+    .reduce((sum, e) => sum + Number(e.amount || 0), 0)
   const loanPaid = loans.filter((l) => l.isPaid).reduce((sum, l) => sum + Number(l.amountThisMonthPesos || 0), 0)
   const loanPending = loans.filter((l) => !l.isPaid).reduce((sum, l) => sum + Number(l.amountThisMonthPesos || 0), 0)
   const committed = foodAmount + paidExpenses + pendingExpenses + loanPaid + loanPending
@@ -369,12 +377,14 @@ async function getLocalDashboard(db, month) {
       foodAmount,
       paidExpenses,
       pendingExpenses,
+      pendingExpensesWithoutRent,
       loanPaid,
       loanPending,
       committed,
       estimatedBalance: salary - committed,
       paidTotal: paidExpenses + loanPaid,
       pendingTotal: pendingExpenses + loanPending,
+      pendingTotalWithoutRent: pendingExpensesWithoutRent + loanPending,
     },
     expenses,
     loans,
