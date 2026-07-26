@@ -212,7 +212,7 @@ function ConfigPanel({ config, month, onSaved }) {
   useEffect(() => {
     form.setFieldsValue({
       salary: config?.salary || 0,
-      foodPercent: config?.foodPercent ?? 30,
+      foodPercent: config?.foodPercent ?? 25,
       notes: config?.notes || '',
     })
   }, [config, form])
@@ -837,7 +837,7 @@ function AppContent() {
 
       <Row gutter={[12, 12]} className="stats">
         <Col xs={24} sm={12} lg={4}><StatTile icon={<DollarOutlined />} label="Sueldo" value={data?.summary?.salary || 0} /></Col>
-        <Col xs={24} sm={12} lg={4}><StatTile icon={<WalletOutlined />} label={`Alimentos (${data?.summary?.foodPercent ?? 30}%)`} value={data?.summary?.foodAmount || 0} /></Col>
+        <Col xs={24} sm={12} lg={4}><StatTile icon={<WalletOutlined />} label={`Alimentos (${data?.summary?.foodPercent ?? 25}%)`} value={data?.summary?.foodAmount || 0} /></Col>
         <Col xs={24} sm={12} lg={4}><StatTile icon={<CreditCardOutlined />} label="Tarjeta" value={data?.summary?.currentCreditExpenses || 0} /></Col>
         <Col xs={24} sm={12} lg={4}>
           <StatTile

@@ -25,7 +25,7 @@ async function connectDb() {
 const MonthConfigSchema = new mongoose.Schema({
   month: { type: String, required: true, unique: true }, // YYYY-MM
   salary: { type: Number, default: 0 },
-  foodPercent: { type: Number, default: 30 },
+  foodPercent: { type: Number, default: 25 },
   notes: { type: String, default: '' },
 }, { timestamps: true })
 
@@ -368,7 +368,7 @@ async function getDashboard(month) {
   ])
   const loans = allLoans.map((loan) => loanForMonth(loan, month)).filter(Boolean)
   const salary = config?.salary || 0
-  const foodPercent = config?.foodPercent ?? 30
+  const foodPercent = config?.foodPercent ?? 25
   const foodAmount = Math.round(salary * foodPercent / 100)
   const paidExpenses = expenses.reduce((sum, e) => sum + expensePaidAmount(e), 0)
   const pendingExpenses = expenses.reduce((sum, e) => sum + expensePendingAmount(e), 0)
@@ -387,7 +387,7 @@ async function getDashboard(month) {
   const committed = foodAmount + paidExpenses + pendingExpenses + loanPaid + loanPending
   return {
     month,
-    config: config || { month, salary: 0, foodPercent: 30, notes: '' },
+    config: config || { month, salary: 0, foodPercent: 25, notes: '' },
     summary: {
       salary,
       foodPercent,
@@ -417,7 +417,7 @@ async function getLocalDashboard(db, month) {
   const expenses = db.expenses.filter((item) => item.month === month).sort((a, b) => b.date.localeCompare(a.date))
   const loans = db.loans.map((loan) => loanForMonth(loan, month)).filter(Boolean)
   const salary = config?.salary || 0
-  const foodPercent = config?.foodPercent ?? 30
+  const foodPercent = config?.foodPercent ?? 25
   const foodAmount = Math.round(salary * foodPercent / 100)
   const paidExpenses = expenses.reduce((sum, e) => sum + expensePaidAmount(e), 0)
   const pendingExpenses = expenses.reduce((sum, e) => sum + expensePendingAmount(e), 0)
@@ -437,7 +437,7 @@ async function getLocalDashboard(db, month) {
 
   return {
     month,
-    config: config || { month, salary: 0, foodPercent: 30, notes: '' },
+    config: config || { month, salary: 0, foodPercent: 25, notes: '' },
     summary: {
       salary,
       foodPercent,
@@ -473,7 +473,7 @@ async function localHandler(req, res, url, resource, id) {
   if (resource === 'config') {
     if (req.method === 'GET') {
       const month = url.searchParams.get('month') || getMonth()
-      return send(res, 200, db.monthConfigs.find((item) => item.month === month) || { month, salary: 0, foodPercent: 30, notes: '' })
+      return send(res, 200, db.monthConfigs.find((item) => item.month === month) || { month, salary: 0, foodPercent: 25, notes: '' })
     }
     if (req.method === 'POST') {
       const body = await readBody(req)
@@ -591,7 +591,7 @@ async function handler(req, res) {
       if (req.method === 'GET') {
         const month = url.searchParams.get('month') || getMonth()
         const config = await MonthConfig.findOne({ month }).lean()
-        return send(res, 200, config || { month, salary: 0, foodPercent: 30, notes: '' })
+        return send(res, 200, config || { month, salary: 0, foodPercent: 25, notes: '' })
       }
       if (req.method === 'POST') {
         const body = await readBody(req)
