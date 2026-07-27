@@ -78,6 +78,17 @@ main {
   margin-bottom: 8px;
 }
 
+.stat-title-action {
+  max-width: 100%;
+}
+
+.stat-title-action .ant-btn {
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  color: #8a94a3;
+}
+
 .stat-card .ant-statistic-content {
   overflow: hidden;
   font-size: 24px;

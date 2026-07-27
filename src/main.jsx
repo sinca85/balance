@@ -134,6 +134,77 @@ function StatTile({ icon, label, value, hint }) {
   )
 }
 
+function FoodStatTile({ month, config, summary, onSaved }) {
+  const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [percent, setPercent] = useState(summary?.foodPercent ?? 25)
+
+  async function save() {
+    try {
+      setSaving(true)
+      await api('config', {
+        method: 'POST',
+        body: JSON.stringify({
+          month,
+          salary: config?.salary || summary?.salary || 0,
+          foodPercent: Number(percent || 0),
+          notes: config?.notes || '',
+        }),
+      })
+      setOpen(false)
+      onSaved()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const foodPercent = summary?.foodPercent ?? 25
+  function openEditor() {
+    setPercent(foodPercent)
+    setOpen(true)
+  }
+
+  const label = (
+    <Space size={4} className="stat-title-action">
+      <span>{`Alimentos (${foodPercent}%)`}</span>
+      <Tooltip title="Editar porcentaje">
+        <Button
+          type="text"
+          size="small"
+          shape="circle"
+          icon={<EditOutlined />}
+          onClick={(event) => {
+            event.stopPropagation()
+            openEditor()
+          }}
+          aria-label="Editar porcentaje de alimentos"
+        />
+      </Tooltip>
+    </Space>
+  )
+
+  return (
+    <>
+      <StatTile icon={<WalletOutlined />} label={label} value={summary?.foodAmount || 0} />
+      <Modal
+        title="Editar alimentos"
+        open={open}
+        onCancel={() => setOpen(false)}
+        footer={[
+          <Button key="cancel" onClick={() => setOpen(false)}>Cancelar</Button>,
+          <Button key="save" type="primary" loading={saving} onClick={save}>Guardar</Button>,
+        ]}
+      >
+        <Form layout="vertical">
+          <Form.Item label="% alimentos">
+            <InputNumber min={0} max={100} controls={false} suffix="%" value={percent} onChange={(value) => setPercent(value ?? 0)} />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </>
+  )
+}
+
 function CategorySummary({ open, onToggle, totals = {} }) {
   return (
     <section className="category-summary" aria-label="Resumen por categorias">
@@ -837,7 +908,9 @@ function AppContent() {
 
       <Row gutter={[12, 12]} className="stats">
         <Col xs={24} sm={12} lg={4}><StatTile icon={<DollarOutlined />} label="Sueldo" value={data?.summary?.salary || 0} /></Col>
-        <Col xs={24} sm={12} lg={4}><StatTile icon={<WalletOutlined />} label={`Alimentos (${data?.summary?.foodPercent ?? 25}%)`} value={data?.summary?.foodAmount || 0} /></Col>
+        <Col xs={24} sm={12} lg={4}>
+          <FoodStatTile month={month} config={data?.config} summary={data?.summary} onSaved={load} />
+        </Col>
         <Col xs={24} sm={12} lg={4}><StatTile icon={<CreditCardOutlined />} label="Tarjeta" value={data?.summary?.currentCreditExpenses || 0} /></Col>
         <Col xs={24} sm={12} lg={4}>
           <StatTile
