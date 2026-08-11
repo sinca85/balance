@@ -743,8 +743,16 @@ function ExpenseCard({ expense, reload, onEdit }) {
 }
 
 function LoanCard({ loan, month, reload, onEdit }) {
+  const loanId = itemId(loan)
+
   async function toggle() {
-    await api('loan-payment', { method: 'POST', body: JSON.stringify({ loanId: loan._id, month, amount: loan.amountThisMonth, isPaid: !loan.isPaid }) })
+    await api('loan-payment', { method: 'POST', body: JSON.stringify({ loanId, month, amount: loan.amountThisMonth, isPaid: !loan.isPaid }) })
+    reload()
+  }
+
+  async function remove() {
+    if (!loanId) throw new Error('No pude identificar el prestamo para borrar')
+    await api(`loans/${loanId}`, { method: 'DELETE' })
     reload()
   }
 
@@ -762,6 +770,9 @@ function LoanCard({ loan, month, reload, onEdit }) {
         </Button>,
         <Button type="text" icon={<CheckCircleOutlined />} onClick={toggle}>
           {loan.isPaid ? 'Marcar pendiente' : 'Marcar pago'}
+        </Button>,
+        <Button type="text" danger icon={<DeleteOutlined />} onClick={remove}>
+          Borrar
         </Button>,
       ]}
     >
@@ -1064,7 +1075,7 @@ function AppContent() {
               {data?.loans?.length ? (
                 <Row gutter={[14, 14]}>
                   {data.loans.map((loan) => (
-                    <Col xs={24} md={12} xl={8} key={loan._id}>
+                    <Col xs={24} md={12} xl={8} key={itemId(loan)}>
                       <LoanCard loan={loan} month={month} reload={load} onEdit={openEditLoan} />
                     </Col>
                   ))}

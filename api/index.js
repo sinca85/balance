@@ -574,6 +574,13 @@ async function localHandler(req, res, url, resource, id) {
       await writeLocalDb(db)
       return send(res, 200, loan)
     }
+    if (req.method === 'DELETE' && id) {
+      const currentLength = db.loans.length
+      db.loans = db.loans.filter((item) => item._id !== id && item.id !== id)
+      if (db.loans.length === currentLength) return send(res, 404, { error: 'Not found' })
+      await writeLocalDb(db)
+      return send(res, 200, { ok: true })
+    }
   }
 
   if (resource === 'loan-payment' && req.method === 'POST') {
@@ -686,6 +693,11 @@ async function handler(req, res) {
         delete update.updatedAt
         const loan = await Loan.findByIdAndUpdate(id, { $set: update }, { new: true }).lean()
         return send(res, 200, loan)
+      }
+      if (req.method === 'DELETE' && id) {
+        const loan = await Loan.findByIdAndDelete(id).lean()
+        if (!loan) return send(res, 404, { error: 'Not found' })
+        return send(res, 200, { ok: true })
       }
     }
 
