@@ -238,11 +238,14 @@ async function ensureFixedExpensesForMonth(month) {
     isFixed: true,
     month: { $lt: month },
     $or: [{ renewUntil: '' }, { renewUntil: { $gte: month } }, { renewUntil: null }],
-  }).sort({ month: 1, createdAt: 1 }).lean()
+  }).sort({ month: -1, updatedAt: -1, createdAt: -1 }).lean()
 
   const created = []
+  const sourceKeys = new Set()
   for (const source of sources) {
     const key = fixedExpenseKey(source)
+    if (sourceKeys.has(key)) continue
+    sourceKeys.add(key)
     if (existingKeys.has(key)) continue
 
     const day = String(source.fixedDay || Number(source.date?.slice(8, 10)) || 1).padStart(2, '0')
@@ -272,10 +275,17 @@ function ensureLocalFixedExpensesForMonth(db, month) {
   const existingKeys = new Set(db.expenses.filter((e) => e.month === month && e.isFixed).map(fixedExpenseKey))
   const sources = db.expenses
     .filter((e) => e.isFixed && e.month < month && (!e.renewUntil || e.renewUntil >= month))
-    .sort((a, b) => `${a.month}-${a.createdAt || ''}`.localeCompare(`${b.month}-${b.createdAt || ''}`))
+    .sort((a, b) => {
+      const monthDiff = monthIndex(b.month) - monthIndex(a.month)
+      if (monthDiff) return monthDiff
+      return String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || ''))
+    })
 
+  const sourceKeys = new Set()
   for (const source of sources) {
     const key = fixedExpenseKey(source)
+    if (sourceKeys.has(key)) continue
+    sourceKeys.add(key)
     if (existingKeys.has(key)) continue
 
     const day = String(source.fixedDay || Number(source.date?.slice(8, 10)) || 1).padStart(2, '0')
