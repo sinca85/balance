@@ -121,13 +121,18 @@ function monthIndex(month) {
 }
 
 function fixedExpenseKey(expense) {
+  const fixedDay = expense.fixedDay || Number(expense.date?.slice(8, 10)) || ''
   return [
-    expense.title,
-    Number(expense.amount || 0),
+    String(expense.title || '').trim().toLowerCase(),
     expense.category || 'general',
     expense.paymentMethod || 'efectivo',
     expense.creditCard || '',
+    fixedDay,
   ].join('|')
+}
+
+function previousMonth(month) {
+  return addMonths(month, -1)
 }
 
 function clampAmount(value, min, max) {
@@ -514,7 +519,18 @@ async function localHandler(req, res, url, resource, id) {
       return send(res, 200, expense)
     }
     if (req.method === 'DELETE' && id) {
-      db.expenses = db.expenses.filter((item) => item._id !== id)
+      const expense = db.expenses.find((item) => item._id === id || item.id === id)
+      if (!expense) return send(res, 404, { error: 'Not found' })
+      if (expense.isFixed && expense.month) {
+        const key = fixedExpenseKey(expense)
+        for (const item of db.expenses) {
+          if (item.isFixed && item.month < expense.month && fixedExpenseKey(item) === key) {
+            item.renewUntil = previousMonth(expense.month)
+            item.updatedAt = new Date().toISOString()
+          }
+        }
+      }
+      db.expenses = db.expenses.filter((item) => item._id !== id && item.id !== id)
       await writeLocalDb(db)
       return send(res, 200, { ok: true })
     }
@@ -619,6 +635,20 @@ async function handler(req, res) {
         return send(res, 200, expense)
       }
       if (req.method === 'DELETE' && id) {
+        const current = await Expense.findById(id).lean()
+        if (!current) return send(res, 404, { error: 'Not found' })
+        if (current.isFixed && current.month) {
+          const fixedSources = await Expense.find({ isFixed: true, month: { $lt: current.month } }).lean()
+          const sourceIds = fixedSources
+            .filter((expense) => fixedExpenseKey(expense) === fixedExpenseKey(current))
+            .map((expense) => expense._id)
+          if (sourceIds.length) {
+            await Expense.updateMany(
+              { _id: { $in: sourceIds } },
+              { $set: { renewUntil: previousMonth(current.month) } }
+            )
+          }
+        }
         await Expense.findByIdAndDelete(id)
         return send(res, 200, { ok: true })
       }

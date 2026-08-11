@@ -110,6 +110,10 @@ function expensePaymentStatus(expense) {
   return 'pending'
 }
 
+function itemId(item) {
+  return item?._id || item?.id || ''
+}
+
 function currentMonth() {
   return new Date().toISOString().slice(0, 7)
 }
@@ -131,6 +135,77 @@ function StatTile({ icon, label, value, hint }) {
       <Statistic title={label} value={value} prefix={icon} formatter={(v) => money.format(v)} />
       {hint && <Text className="stat-hint" type="secondary">{hint}</Text>}
     </Card>
+  )
+}
+
+function SalaryStatTile({ month, config, summary, onSaved }) {
+  const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [salary, setSalary] = useState(summary?.salary || 0)
+  const currentSalary = summary?.salary || 0
+
+  async function save() {
+    try {
+      setSaving(true)
+      await api('config', {
+        method: 'POST',
+        body: JSON.stringify({
+          month,
+          salary: Number(salary || 0),
+          foodPercent: config?.foodPercent ?? summary?.foodPercent ?? 25,
+          notes: config?.notes || '',
+        }),
+      })
+      setOpen(false)
+      onSaved()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function openEditor() {
+    setSalary(currentSalary)
+    setOpen(true)
+  }
+
+  const label = (
+    <Space size={4} className="stat-title-action">
+      <span>Sueldo</span>
+      <Tooltip title="Editar sueldo">
+        <Button
+          type="text"
+          size="small"
+          shape="circle"
+          icon={<EditOutlined />}
+          onClick={(event) => {
+            event.stopPropagation()
+            openEditor()
+          }}
+          aria-label="Editar sueldo"
+        />
+      </Tooltip>
+    </Space>
+  )
+
+  return (
+    <>
+      <StatTile icon={<DollarOutlined />} label={label} value={currentSalary} />
+      <Modal
+        title="Editar sueldo"
+        open={open}
+        onCancel={() => setOpen(false)}
+        footer={[
+          <Button key="cancel" onClick={() => setOpen(false)}>Cancelar</Button>,
+          <Button key="save" type="primary" loading={saving} onClick={save}>Guardar</Button>,
+        ]}
+      >
+        <Form layout="vertical">
+          <Form.Item label="Sueldo cobrado">
+            <InputNumber min={0} controls={false} prefix="$" value={salary} onChange={(value) => setSalary(value ?? 0)} />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </>
   )
 }
 
@@ -357,7 +432,9 @@ function ExpenseForm({ month, editingExpense, onSaved, onCancelEdit }) {
       installments: values.paymentMethod === 'credito' ? Number(values.installments || 1) : 1,
       paidAmount: values.isPaid ? Number(values.amount) : (shouldKeepPartialPayment ? currentPaidAmount : 0),
     }
-    await api(editingExpense ? `expenses/${editingExpense._id}` : 'expenses', {
+    const expenseId = itemId(editingExpense)
+    if (editingExpense && !expenseId) throw new Error('No pude identificar el gasto para editar')
+    await api(editingExpense ? `expenses/${expenseId}` : 'expenses', {
       method: editingExpense ? 'PATCH' : 'POST',
       body: JSON.stringify({
         ...payload,
@@ -577,6 +654,7 @@ function ExpenseCard({ expense, reload, onEdit }) {
   const payment = normalizeLegacyPayment(expense)
   const [paymentModalOpen, setPaymentModalOpen] = useState(false)
   const [paymentForm] = Form.useForm()
+  const expenseId = itemId(expense)
   const paidAmount = expensePaidAmount(expense)
   const pendingAmount = expensePendingAmount(expense)
   const paymentStatus = expensePaymentStatus(expense)
@@ -586,13 +664,15 @@ function ExpenseCard({ expense, reload, onEdit }) {
   }, [paymentModalOpen, paymentForm, paidAmount])
 
   async function savePayment(values) {
-    await api(`expenses/${expense._id}`, { method: 'PATCH', body: JSON.stringify({ paidAmount: Number(values.paidAmount || 0) }) })
+    if (!expenseId) throw new Error('No pude identificar el gasto para registrar el pago')
+    await api(`expenses/${expenseId}`, { method: 'PATCH', body: JSON.stringify({ paidAmount: Number(values.paidAmount || 0) }) })
     setPaymentModalOpen(false)
     reload()
   }
 
   async function remove() {
-    await api(`expenses/${expense._id}`, { method: 'DELETE' })
+    if (!expenseId) throw new Error('No pude identificar el gasto para borrar')
+    await api(`expenses/${expenseId}`, { method: 'DELETE' })
     reload()
   }
 
@@ -907,7 +987,9 @@ function AppContent() {
       />
 
       <Row gutter={[12, 12]} className="stats">
-        <Col xs={24} sm={12} lg={4}><StatTile icon={<DollarOutlined />} label="Sueldo" value={data?.summary?.salary || 0} /></Col>
+        <Col xs={24} sm={12} lg={4}>
+          <SalaryStatTile month={month} config={data?.config} summary={data?.summary} onSaved={load} />
+        </Col>
         <Col xs={24} sm={12} lg={4}>
           <FoodStatTile month={month} config={data?.config} summary={data?.summary} onSaved={load} />
         </Col>
@@ -964,7 +1046,7 @@ function AppContent() {
               {filteredExpenses.length ? (
                 <Row gutter={[14, 14]}>
                   {filteredExpenses.map((expense) => (
-                    <Col xs={24} md={12} xl={6} key={expense._id}>
+                    <Col xs={24} md={12} xl={6} key={itemId(expense)}>
                       <ExpenseCard expense={expense} reload={load} onEdit={openEditExpense} />
                     </Col>
                   ))}
