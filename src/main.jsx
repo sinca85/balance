@@ -334,12 +334,12 @@ function emptySavingsItem(index = 1) {
     id: `savings-${Date.now()}-${index}`,
     name: index === 1 ? 'Plazo fijo' : `Ahorro ${index}`,
     method: 'fixed-term',
-    monthlyContribution: 1000,
+    monthlyContribution: 100000,
     annualRate: 40,
   }
 }
 
-function savingsItemSchedule(item, months, marketHistory, fxHistory) {
+function savingsItemSchedule(item, months, marketHistory) {
   let balance = 0
   let shares = 0
   let usdBalance = 0
@@ -356,23 +356,24 @@ function savingsItemSchedule(item, months, marketHistory, fxHistory) {
       const interest = balance - previousBalance - contribution
       return { month, contribution, interest, balance, usdBalance, usdContribution, shares, price }
     }
-    const fxRate = fxHistory?.finalPrice
-    if (!fxRate) return { month, contribution: 0, interest: 0, balance: 0, unavailable: true }
     const base = balance + contribution
     const annualRate = Math.max(Number(item.annualRate || 0), 0) / 100
     const rate = item.method === 'fixed-term'
       ? Math.pow(1 + annualRate, 1 / 12) - 1
       : Math.pow(1 + annualRate, 1 / 365) - 1
-    const basePesos = base * fxRate
-    const interestPesos = basePesos * (Math.pow(1 + rate, item.method === 'fixed-term' ? 1 : monthDays(month)) - 1)
-    const interest = interestPesos / fxRate
-    balance = (basePesos + interestPesos) / fxRate
+    const interest = base * (Math.pow(1 + rate, item.method === 'fixed-term' ? 1 : monthDays(month)) - 1)
+    balance = base + interest
     return { month, contribution, interest, balance }
   })
 }
 
-function formatSavingsNumber(value) {
+function formatSavingsNumber(value, currency = 'USD') {
+  if (currency === 'ARS') return money.format(Math.round(value || 0))
   return formatUsdNumber(value)
+}
+
+function savingsCurrency(item) {
+  return item.method === 'market' ? 'USD' : 'ARS'
 }
 
 function formatUsdNumber(value) {
@@ -443,7 +444,7 @@ function SavingsSimulator({ mode = 'simulation' }) {
 
   const validRange = startMonth <= endMonth
   const months = useMemo(() => validRange ? monthRange(startMonth, endMonth) : [], [startMonth, endMonth, validRange])
-  const marketSymbols = useMemo(() => [...new Set(['USDARS', ...items.filter((item) => item.method === 'market').map((item) => item.asset || 'MELI')])], [items])
+  const marketSymbols = useMemo(() => [...new Set(items.filter((item) => item.method === 'market').map((item) => item.asset || 'MELI'))], [items])
   useEffect(() => {
     if (!validRange || !marketSymbols.length) return undefined
     let ignore = false
@@ -458,7 +459,7 @@ function SavingsSimulator({ mode = 'simulation' }) {
   }, [endMonth, marketSymbols, startMonth, validRange])
   const schedules = useMemo(() => items.map((item) => ({
     item,
-    rows: savingsItemSchedule(item, months, marketHistory[item.asset || 'MELI'], marketHistory.USDARS),
+    rows: savingsItemSchedule(item, months, marketHistory[item.asset || 'MELI']),
   })), [items, marketHistory, months])
   const totals = useMemo(() => months.map((month, index) => schedules.reduce((acc, schedule) => {
     const row = schedule.rows[index]
@@ -467,19 +468,23 @@ function SavingsSimulator({ mode = 'simulation' }) {
     acc.balance += row?.balance || 0
     return acc
   }, { month, contribution: 0, interest: 0, balance: 0 })), [months, schedules])
-  const finalTotal = totals.at(-1)?.balance || 0
-  const totalContributions = totals.reduce((sum, row) => sum + row.contribution, 0)
-  const totalInterest = finalTotal - totalContributions
-
   const methodTotals = useMemo(() => schedules.map(({ item, rows }) => {
     const contributions = rows.reduce((sum, row) => sum + row.contribution, 0)
     const interest = rows.reduce((sum, row) => sum + row.interest, 0)
     const balance = rows.at(-1)?.balance || 0
-    const usdBalance = item.method === 'market' ? (rows.at(-1)?.usdBalance || 0) : balance
-    return { item, contributions, interest, balance, usdBalance }
-  }), [marketHistory, schedules])
-  const rankedMethods = useMemo(() => [...methodTotals].sort((a, b) => b.balance - a.balance), [methodTotals])
-  const bestMethodBalance = rankedMethods[0]?.balance || 0
+    return { item, contributions, interest, balance, currency: savingsCurrency(item) }
+  }), [schedules])
+  const rankedMethods = useMemo(() => [...methodTotals].sort((a, b) => a.currency.localeCompare(b.currency) || b.balance - a.balance), [methodTotals])
+  const currencyTotals = useMemo(() => ['ARS', 'USD'].map((currency) => {
+    const methods = methodTotals.filter((method) => method.currency === currency)
+    return {
+      currency,
+      contributions: methods.reduce((sum, method) => sum + method.contributions, 0),
+      interest: methods.reduce((sum, method) => sum + method.interest, 0),
+      balance: methods.reduce((sum, method) => sum + method.balance, 0),
+      hasMethods: methods.length > 0,
+    }
+  }), [methodTotals])
 
   function updateItem(id, patch) {
     setItems((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item))
@@ -519,7 +524,7 @@ function SavingsSimulator({ mode = 'simulation' }) {
       <Flex justify="space-between" align="center" className="section-title">
         <Space align="center">
           <Title level={3}>{pageTitle}</Title>
-          <Space size={4}><Tag color={isProductive ? 'green' : 'blue'}>{isProductive ? 'Productivo' : 'Simulación'}</Tag><Tag>USD</Tag></Space>
+          <Space size={4}><Tag color={isProductive ? 'green' : 'blue'}>{isProductive ? 'Productivo' : 'Simulación'}</Tag><Tag>Moneda por método</Tag></Space>
         </Space>
         <Button type="primary" loading={savingSimulation} onClick={saveSimulation}>{isProductive ? 'Guardar ahorros' : 'Guardar simulación'}</Button>
       </Flex>
@@ -536,7 +541,7 @@ function SavingsSimulator({ mode = 'simulation' }) {
             <DatePicker picker="month" value={dayjs(`${endMonth}-01`)} onChange={(value) => setEndMonth(monthValue(value))} allowClear={false} />
           </Col>
           <Col xs={24} md={14}>
-            <Text type="secondary">Los aportes y resultados se expresan en USD. Plazo fijo y caución se calculan internamente en pesos usando el dólar de referencia actual.</Text>
+            <Text type="secondary">Acciones se calculan en USD. Plazo fijo y caución se calculan y muestran en pesos.</Text>
           </Col>
         </Row>
         {!validRange && <Alert className="savings-alert" type="warning" showIcon message="La fecha final debe ser igual o posterior a la inicial." />}
@@ -568,8 +573,8 @@ function SavingsSimulator({ mode = 'simulation' }) {
                   />
                 </Col>}
                 <Col xs={24} sm={12} md={5}>
-                  <Text className="control-label">Aporte mensual (USD)</Text>
-                  <InputNumber min={0} controls={false} prefix="USD" value={item.monthlyContribution} onChange={(value) => updateItem(item.id, { monthlyContribution: value ?? 0 })} />
+                  <Text className="control-label">{`Aporte mensual (${savingsCurrency(item)})`}</Text>
+                  <InputNumber min={0} controls={false} prefix={savingsCurrency(item)} value={item.monthlyContribution} onChange={(value) => updateItem(item.id, { monthlyContribution: value ?? 0 })} />
                 </Col>
                 {item.method !== 'market' && <Col xs={24} sm={12} md={5}>
                   <Text className="control-label">Tasa anual</Text>
@@ -588,17 +593,26 @@ function SavingsSimulator({ mode = 'simulation' }) {
           <>
             <Divider />
             <Row gutter={[12, 12]} className="savings-summary">
-              <Col xs={24} sm={8}><Statistic title="Aportes totales" value={totalContributions} formatter={(value) => formatSavingsNumber(value)} /></Col>
-              <Col xs={24} sm={8}><Statistic title="Intereses estimados" value={totalInterest} formatter={(value) => formatSavingsNumber(value)} /></Col>
-              <Col xs={24} sm={8}><Statistic title="Saldo final estimado" value={finalTotal} formatter={(value) => formatSavingsNumber(value)} /></Col>
+              {currencyTotals.filter((total) => total.hasMethods).map((total) => (
+                <Col key={total.currency} xs={24} lg={12}>
+                  <Card size="small" className="savings-currency-summary">
+                    <Text strong>Totales en {total.currency}</Text>
+                    <Row gutter={[8, 8]}>
+                      <Col xs={24} sm={8}><Statistic title="Aportes" value={total.contributions} formatter={(value) => formatSavingsNumber(value, total.currency)} /></Col>
+                      <Col xs={24} sm={8}><Statistic title="Intereses" value={total.interest} formatter={(value) => formatSavingsNumber(value, total.currency)} /></Col>
+                      <Col xs={24} sm={8}><Statistic title="Saldo final" value={total.balance} formatter={(value) => formatSavingsNumber(value, total.currency)} /></Col>
+                    </Row>
+                  </Card>
+                </Col>
+              ))}
             </Row>
             <section className="savings-comparison" aria-label="Comparación de métodos de ahorro">
               <Flex justify="space-between" align="center" className="savings-subsection-title">
                 <Title level={4}>Comparación por método</Title>
-                <Text type="secondary">Ordenado por saldo final</Text>
+                <Text type="secondary">Ordenado por saldo final dentro de cada moneda</Text>
               </Flex>
               <Row gutter={[12, 12]}>
-                {rankedMethods.map(({ item, contributions, interest, balance, usdBalance }, index) => (
+                {rankedMethods.map(({ item, contributions, interest, balance, currency }, index) => (
                   <Col key={item.id} xs={24} sm={12} lg={6}>
                     <Card className="savings-method-card" size="small">
                       <Flex justify="space-between" align="start" gap={8}>
@@ -610,12 +624,11 @@ function SavingsSimulator({ mode = 'simulation' }) {
                         </div>
                         {index === 0 && <Tag color="green">Mejor saldo</Tag>}
                       </Flex>
-                      <Statistic title="Saldo final (USD)" value={balance} formatter={(value) => formatSavingsNumber(value)} />
-                      <Progress percent={bestMethodBalance ? Math.round((balance / bestMethodBalance) * 100) : 0} showInfo={false} strokeColor="#1677ff" />
+                      <Statistic title={`Saldo final (${currency})`} value={balance} formatter={(value) => formatSavingsNumber(value, currency)} />
+                      <Progress percent={Math.round((balance / (methodTotals.filter((method) => method.currency === currency).reduce((best, method) => Math.max(best, method.balance), 0) || 1)) * 100)} showInfo={false} strokeColor="#1677ff" />
                       <div className="savings-method-metrics">
-                        <span><Text type="secondary">Aportes</Text><strong>{formatSavingsNumber(contributions)}</strong></span>
-                        <span><Text type="secondary">Intereses</Text><strong>{formatSavingsNumber(interest)}</strong></span>
-                        <span className="savings-usd-metric"><Text type="secondary">Saldo en USD</Text><strong>{formatUsdNumber(usdBalance)}</strong></span>
+                        <span><Text type="secondary">Aportes</Text><strong>{formatSavingsNumber(contributions, currency)}</strong></span>
+                        <span><Text type="secondary">Intereses</Text><strong>{formatSavingsNumber(interest, currency)}</strong></span>
                       </div>
                     </Card>
                   </Col>
@@ -627,8 +640,7 @@ function SavingsSimulator({ mode = 'simulation' }) {
                 <thead>
                   <tr>
                     <th rowSpan="2">Mes</th>
-                    {schedules.map(({ item }) => <th key={item.id} colSpan="3" className="savings-method-heading">{item.name || 'Sin nombre'}</th>)}
-                    <th colSpan="3" className="savings-total-heading">Total</th>
+                    {schedules.map(({ item }) => <th key={item.id} colSpan="3" className="savings-method-heading">{item.name || 'Sin nombre'} ({savingsCurrency(item)})</th>)}
                   </tr>
                   <tr>
                     {schedules.flatMap(({ item }) => [
@@ -636,7 +648,6 @@ function SavingsSimulator({ mode = 'simulation' }) {
                       <th key={`${item.id}-interest`}>Interés</th>,
                       <th key={`${item.id}-balance`}>Acumulado</th>,
                     ])}
-                    <th>Aportes</th><th>Interés</th><th>Acumulado</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -645,27 +656,22 @@ function SavingsSimulator({ mode = 'simulation' }) {
                       <td>{dayjs(`${row.month}-01`).format('MMM YYYY')}</td>
                       {schedules.flatMap(({ item, rows }) => {
                         const methodRow = rows[index]
+                        const currency = savingsCurrency(item)
                         return [
-                          <td key={`${item.id}-${row.month}-contribution`}>{formatSavingsNumber(methodRow?.contribution)}</td>,
-                          <td key={`${item.id}-${row.month}-interest`}>{formatSavingsNumber(methodRow?.interest)}</td>,
-                          <td key={`${item.id}-${row.month}-balance`}><strong>{formatSavingsNumber(methodRow?.balance)}</strong></td>,
+                          <td key={`${item.id}-${row.month}-contribution`}>{formatSavingsNumber(methodRow?.contribution, currency)}</td>,
+                          <td key={`${item.id}-${row.month}-interest`}>{formatSavingsNumber(methodRow?.interest, currency)}</td>,
+                          <td key={`${item.id}-${row.month}-balance`}><strong>{formatSavingsNumber(methodRow?.balance, currency)}</strong></td>,
                         ]
                       })}
-                      <td>{formatSavingsNumber(row.contribution)}</td>
-                      <td>{formatSavingsNumber(row.interest)}</td>
-                      <td><strong>{formatSavingsNumber(row.balance)}</strong></td>
                     </tr>
                   ))}
                   <tr className="savings-table-total-row">
                     <td>Total período</td>
-                    {methodTotals.flatMap(({ item, contributions, interest, balance }) => [
-                      <td key={`${item.id}-total-contribution`}>{formatSavingsNumber(contributions)}</td>,
-                      <td key={`${item.id}-total-interest`}>{formatSavingsNumber(interest)}</td>,
-                      <td key={`${item.id}-total-balance`}><strong>{formatSavingsNumber(balance)}</strong></td>,
+                    {methodTotals.flatMap(({ item, contributions, interest, balance, currency }) => [
+                      <td key={`${item.id}-total-contribution`}>{formatSavingsNumber(contributions, currency)}</td>,
+                      <td key={`${item.id}-total-interest`}>{formatSavingsNumber(interest, currency)}</td>,
+                      <td key={`${item.id}-total-balance`}><strong>{formatSavingsNumber(balance, currency)}</strong></td>,
                     ])}
-                    <td>{formatSavingsNumber(totalContributions)}</td>
-                    <td>{formatSavingsNumber(totalInterest)}</td>
-                    <td><strong>{formatSavingsNumber(finalTotal)}</strong></td>
                   </tr>
                 </tbody>
               </table>
