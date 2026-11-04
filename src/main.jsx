@@ -341,16 +341,15 @@ function emptySavingsItem(index = 1) {
 function savingsItemSchedule(item, months, marketHistory) {
   let balance = 0
   let shares = 0
-  let contributed = 0
   return months.map((month) => {
     const contribution = Math.max(Number(item.monthlyContribution || 0), 0)
     if (item.method === 'market') {
       const price = marketHistory?.prices?.[month]
       if (!price) return { month, contribution: 0, interest: 0, balance: 0, unavailable: true }
+      const previousBalance = balance
       shares += contribution / price
-      contributed += contribution
       balance = shares * price
-      const interest = balance - (contributed - contribution) - contribution
+      const interest = balance - previousBalance - contribution
       return { month, contribution, interest, balance, shares, price }
     }
     const base = balance + contribution
