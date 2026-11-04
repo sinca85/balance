@@ -308,6 +308,7 @@ function CategorySummary({ open, onToggle, totals = {} }) {
 }
 
 const savingsStorageKey = 'balance.savings-simulations.v1'
+const productiveSavingsStorageKey = 'balance.savings.v1'
 
 function monthValue(value) {
   return value?.format('YYYY-MM') || value
@@ -367,7 +368,11 @@ function formatSavingsNumber(value) {
   return money.format(Math.round(value || 0))
 }
 
-function SavingsSimulator() {
+function SavingsSimulator({ mode = 'simulation' }) {
+  const isProductive = mode === 'productive'
+  const storageKey = isProductive ? productiveSavingsStorageKey : savingsStorageKey
+  const storageEndpoint = isProductive ? 'savings' : 'savings-simulation'
+  const pageTitle = isProductive ? 'Ahorros' : 'Simulación de ahorro'
   const defaultStart = dayjs().format('YYYY-MM')
   const defaultEnd = dayjs().add(12, 'month').format('YYYY-MM')
   const [loading, setLoading] = useState(true)
@@ -376,21 +381,21 @@ function SavingsSimulator() {
   const [marketHistory, setMarketHistory] = useState({})
   const [startMonth, setStartMonth] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem(savingsStorageKey) || 'null')?.startMonth || defaultStart
+      return JSON.parse(localStorage.getItem(storageKey) || 'null')?.startMonth || defaultStart
     } catch {
       return defaultStart
     }
   })
   const [endMonth, setEndMonth] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem(savingsStorageKey) || 'null')?.endMonth || defaultEnd
+      return JSON.parse(localStorage.getItem(storageKey) || 'null')?.endMonth || defaultEnd
     } catch {
       return defaultEnd
     }
   })
   const [items, setItems] = useState(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem(savingsStorageKey) || 'null')
+      const saved = JSON.parse(localStorage.getItem(storageKey) || 'null')
       return Array.isArray(saved?.items) && saved.items.length ? saved.items : [emptySavingsItem()]
     } catch {
       return [emptySavingsItem()]
@@ -398,7 +403,7 @@ function SavingsSimulator() {
   })
   const [saved, setSaved] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem(savingsStorageKey) || 'null')?.saved || false
+      return JSON.parse(localStorage.getItem(storageKey) || 'null')?.saved || false
     } catch {
       return false
     }
@@ -406,7 +411,7 @@ function SavingsSimulator() {
 
   useEffect(() => {
     let ignore = false
-    api('savings')
+    api(storageEndpoint)
       .then((state) => {
         if (ignore) return
         if (state.startMonth) setStartMonth(state.startMonth)
@@ -423,7 +428,7 @@ function SavingsSimulator() {
     return () => {
       ignore = true
     }
-  }, [])
+  }, [storageEndpoint])
 
   const validRange = startMonth <= endMonth
   const months = useMemo(() => validRange ? monthRange(startMonth, endMonth) : [], [startMonth, endMonth, validRange])
@@ -481,11 +486,11 @@ function SavingsSimulator() {
   async function saveSimulation() {
     try {
       setSavingSimulation(true)
-      const state = await api('savings', {
+      const state = await api(storageEndpoint, {
         method: 'POST',
         body: JSON.stringify({ startMonth, endMonth, items }),
       })
-      localStorage.setItem(savingsStorageKey, JSON.stringify({ ...state, saved: true }))
+      localStorage.setItem(storageKey, JSON.stringify({ ...state, saved: true }))
       setSaved(true)
       setStorageError('')
     } catch (error) {
@@ -500,10 +505,10 @@ function SavingsSimulator() {
     <section className="savings-section">
       <Flex justify="space-between" align="center" className="section-title">
         <Space align="center">
-          <Title level={3}>Simulador de ahorro</Title>
-          <Tag color="blue">Local</Tag>
+          <Title level={3}>{pageTitle}</Title>
+          <Tag color={isProductive ? 'green' : 'blue'}>{isProductive ? 'Productivo' : 'Simulación'}</Tag>
         </Space>
-        <Button type="primary" loading={savingSimulation} onClick={saveSimulation}>Guardar simulación</Button>
+        <Button type="primary" loading={savingSimulation} onClick={saveSimulation}>{isProductive ? 'Guardar ahorros' : 'Guardar simulación'}</Button>
       </Flex>
       <Card className="savings-card" variant="borderless">
         {storageError && <Alert className="savings-alert" type="error" showIcon message="No se pudo acceder al almacenamiento persistente" description={storageError} />}
@@ -653,7 +658,7 @@ function SavingsSimulator() {
             </div>
           </>
         )}
-        {saved && <Text className="savings-saved" type="success">Simulación guardada localmente en este dispositivo.</Text>}
+        {saved && <Text className="savings-saved" type="success">{isProductive ? 'Ahorros guardados correctamente.' : 'Simulación guardada correctamente.'}</Text>}
       </Card>
     </section>
   )
@@ -1228,16 +1233,24 @@ function AppContent() {
   const [entryMode, setEntryMode] = useState('create')
   const [refreshing, setRefreshing] = useState(false)
   const [showCategorySummary, setShowCategorySummary] = useState(false)
-  const [activeSection, setActiveSection] = useState(() => window.location.hash === '#savings' ? 'savings' : 'balance')
+  const [activeSection, setActiveSection] = useState(() => {
+    if (window.location.hash === '#savings') return 'savings'
+    if (window.location.hash === '#simulation') return 'simulation'
+    return 'balance'
+  })
 
   useEffect(() => {
-    const onHashChange = () => setActiveSection(window.location.hash === '#savings' ? 'savings' : 'balance')
+    const onHashChange = () => {
+      if (window.location.hash === '#savings') return setActiveSection('savings')
+      if (window.location.hash === '#simulation') return setActiveSection('simulation')
+      return setActiveSection('balance')
+    }
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
 
   function navigateSection(section) {
-    window.location.hash = section === 'savings' ? 'savings' : 'balance'
+    window.location.hash = section === 'savings' ? 'savings' : section === 'simulation' ? 'simulation' : 'balance'
     setActiveSection(section)
   }
 
@@ -1334,7 +1347,8 @@ function AppContent() {
       <header className="hero">
         <nav className="site-nav" aria-label="Secciones">
           <Button type={activeSection === 'balance' ? 'primary' : 'text'} onClick={() => navigateSection('balance')}>Balance</Button>
-          <Button type={activeSection === 'savings' ? 'primary' : 'text'} onClick={() => navigateSection('savings')}>Simulación de ahorro</Button>
+          <Button type={activeSection === 'savings' ? 'primary' : 'text'} onClick={() => navigateSection('savings')}>Ahorros</Button>
+          <Button type={activeSection === 'simulation' ? 'primary' : 'text'} onClick={() => navigateSection('simulation')}>Simulación</Button>
         </nav>
         <Space orientation="vertical" size={6}>
           {activeSection === 'balance' && <Space align="center">
@@ -1350,7 +1364,7 @@ function AppContent() {
               />
             </Tooltip>
           </Space>}
-          <Text type="secondary">{activeSection === 'balance' ? 'Sueldo, alimentos, gastos, fijos, prestamos y saldo estimado en una sola vista.' : 'Proyección de aportes e intereses compuestos a lo largo del tiempo.'}</Text>
+          <Text type="secondary">{activeSection === 'balance' ? 'Sueldo, alimentos, gastos, fijos, prestamos y saldo estimado en una sola vista.' : activeSection === 'savings' ? 'Ahorros productivos y aportes planificados en una sola vista.' : 'Proyección de aportes e intereses compuestos a lo largo del tiempo.'}</Text>
         </Space>
       </header>
 
@@ -1457,7 +1471,7 @@ function AppContent() {
           </Space>
         </Col>
       </Row>
-      </> : <SavingsSimulator />}
+      </> : <SavingsSimulator mode={activeSection === 'savings' ? 'productive' : 'simulation'} />}
     </main>
   )
 }

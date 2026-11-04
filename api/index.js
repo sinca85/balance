@@ -7,6 +7,8 @@ import { get, put } from '@vercel/blob'
 const localDbPath = path.join(process.cwd(), '.data', 'local-db.json')
 const localSavingsPath = path.join(process.cwd(), '.data', 'savings-simulation.json')
 const savingsBlobPath = 'balance/savings-simulation.json'
+const localProductiveSavingsPath = path.join(process.cwd(), '.data', 'savings.json')
+const productiveSavingsBlobPath = 'balance/savings.json'
 const expenseCategories = ['general', 'vivienda', 'comida', 'transporte', 'hijos', 'tarjeta', 'salud', 'ocio']
 
 let cached = global.mongooseConnection
@@ -94,27 +96,27 @@ async function writeLocalDb(db) {
   await fs.writeFile(localDbPath, JSON.stringify(db, null, 2))
 }
 
-async function readSavingsState() {
+async function readSavingsState(blobPath, localPath) {
   if (process.env.VERCEL || process.env.BLOB_READ_WRITE_TOKEN) {
     if (!process.env.BLOB_READ_WRITE_TOKEN) throw new Error('Missing BLOB_READ_WRITE_TOKEN. Create and link a private Vercel Blob Store.')
-    const blob = await get(savingsBlobPath, { access: 'private' })
+    const blob = await get(blobPath, { access: 'private' })
     if (!blob) return { startMonth: '', endMonth: '', items: [] }
     return JSON.parse(await new Response(blob.stream).text())
   }
 
   try {
-    return JSON.parse(await fs.readFile(localSavingsPath, 'utf8'))
+    return JSON.parse(await fs.readFile(localPath, 'utf8'))
   } catch (error) {
     if (error.code !== 'ENOENT') throw error
     return { startMonth: '', endMonth: '', items: [] }
   }
 }
 
-async function writeSavingsState(state) {
+async function writeSavingsState(state, blobPath, localPath) {
   const payload = JSON.stringify(state, null, 2)
   if (process.env.VERCEL || process.env.BLOB_READ_WRITE_TOKEN) {
     if (!process.env.BLOB_READ_WRITE_TOKEN) throw new Error('Missing BLOB_READ_WRITE_TOKEN. Create and link a private Vercel Blob Store.')
-    await put(savingsBlobPath, payload, {
+    await put(blobPath, payload, {
       access: 'private',
       addRandomSuffix: false,
       allowOverwrite: true,
@@ -123,12 +125,12 @@ async function writeSavingsState(state) {
     return
   }
 
-  await fs.mkdir(path.dirname(localSavingsPath), { recursive: true })
-  await fs.writeFile(localSavingsPath, payload)
+  await fs.mkdir(path.dirname(localPath), { recursive: true })
+  await fs.writeFile(localPath, payload)
 }
 
-async function savingsHandler(req, res) {
-  if (req.method === 'GET') return send(res, 200, await readSavingsState())
+async function savingsHandler(req, res, storage) {
+  if (req.method === 'GET') return send(res, 200, await readSavingsState(storage.blobPath, storage.localPath))
   if (req.method === 'POST') {
     const body = await readBody(req)
     const state = {
@@ -137,7 +139,7 @@ async function savingsHandler(req, res) {
       items: Array.isArray(body.items) ? body.items : [],
       updatedAt: new Date().toISOString(),
     }
-    await writeSavingsState(state)
+    await writeSavingsState(state, storage.blobPath, storage.localPath)
     return send(res, 200, state)
   }
   return send(res, 405, { error: 'Method not allowed' })
@@ -703,7 +705,8 @@ async function handler(req, res) {
     const id = parts[1]
 
     if (resource === 'health') return send(res, 200, { ok: true })
-    if (resource === 'savings') return await savingsHandler(req, res)
+    if (resource === 'savings') return await savingsHandler(req, res, { blobPath: productiveSavingsBlobPath, localPath: localProductiveSavingsPath })
+    if (resource === 'savings-simulation') return await savingsHandler(req, res, { blobPath: savingsBlobPath, localPath: localSavingsPath })
     if (resource === 'market-history' && req.method === 'GET') return await marketHistoryHandler(req, res, url)
     if (!process.env.MONGODB_URI) {
       if (process.env.VERCEL) {
