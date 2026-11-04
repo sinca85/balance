@@ -8,12 +8,6 @@ const localDbPath = path.join(process.cwd(), '.data', 'local-db.json')
 const localSavingsPath = path.join(process.cwd(), '.data', 'savings-simulation.json')
 const savingsBlobPath = 'balance/savings-simulation.json'
 const expenseCategories = ['general', 'vivienda', 'comida', 'transporte', 'hijos', 'tarjeta', 'salud', 'ocio']
-const marketAssets = {
-  MELI: { symbol: 'MELI', name: 'Mercado Libre' },
-  AAPL: { symbol: 'AAPL', name: 'Apple' },
-  YPF: { symbol: 'YPF', name: 'YPF (Argentina)' },
-  NVDA: { symbol: 'NVDA', name: 'Nvidia' },
-}
 
 let cached = global.mongooseConnection
 if (!cached) cached = global.mongooseConnection = { conn: null, promise: null }
@@ -151,7 +145,7 @@ async function savingsHandler(req, res) {
 
 async function marketHistoryHandler(req, res, url) {
   const requestedSymbol = String(url.searchParams.get('symbol') || '').toUpperCase()
-  const asset = marketAssets[requestedSymbol]
+  const asset = /^[A-Z0-9.-]{1,15}$/.test(requestedSymbol) ? { symbol: requestedSymbol, name: requestedSymbol } : null
   const startMonth = url.searchParams.get('start')
   const endMonth = url.searchParams.get('end')
   if (!asset || !/^\d{4}-\d{2}$/.test(startMonth) || !/^\d{4}-\d{2}$/.test(endMonth)) {

@@ -308,12 +308,6 @@ function CategorySummary({ open, onToggle, totals = {} }) {
 }
 
 const savingsStorageKey = 'balance.savings-simulations.v1'
-const marketAssets = [
-  { value: 'MELI', label: 'Mercado Libre (MELI)' },
-  { value: 'AAPL', label: 'Apple (AAPL)' },
-  { value: 'YPF', label: 'YPF (Argentina)' },
-  { value: 'NVDA', label: 'Nvidia (NVDA)' },
-]
 
 function monthValue(value) {
   return value?.format('YYYY-MM') || value
@@ -544,12 +538,17 @@ function SavingsSimulator() {
                   <Select
                     value={item.method}
                     onChange={(value) => updateItem(item.id, { method: value })}
-                    options={[{ value: 'fixed-term', label: 'Plazo fijo mensual' }, { value: 'caucion', label: 'Caución diaria' }, { value: 'market', label: 'Acciones' }]}
+                    options={[{ value: 'fixed-term', label: 'Plazo fijo mensual' }, { value: 'caucion', label: 'Caución diaria' }, { value: 'market', label: 'Inversión bursátil' }]}
                   />
                 </Col>
                 {item.method === 'market' && <Col xs={24} sm={12} md={5}>
-                  <Text className="control-label">Activo</Text>
-                  <Select value={item.asset || 'MELI'} onChange={(value) => updateItem(item.id, { asset: value })} options={marketAssets} />
+                  <Text className="control-label">Ticker</Text>
+                  <Input
+                    value={item.asset || 'MELI'}
+                    onChange={(event) => updateItem(item.id, { asset: event.target.value.toUpperCase().replace(/[^A-Z0-9.-]/g, '') })}
+                    placeholder="Ej. MELI"
+                    maxLength={15}
+                  />
                 </Col>}
                 <Col xs={24} sm={12} md={5}>
                   <Text className="control-label">Aporte mensual</Text>
@@ -589,7 +588,7 @@ function SavingsSimulator() {
                         <div>
                           <Text strong>{item.name || 'Sin nombre'}</Text>
                           <Text className="savings-method-type" type="secondary">
-                            {item.method === 'fixed-term' ? 'Plazo fijo mensual' : item.method === 'caucion' ? 'Caución diaria' : `${marketAssets.find((asset) => asset.value === (item.asset || 'MELI'))?.label || 'Acciones'} · histórico`}
+                            {item.method === 'fixed-term' ? 'Plazo fijo mensual' : item.method === 'caucion' ? 'Caución diaria' : `Ticker ${(item.asset || 'MELI').toUpperCase()} · histórico`}
                           </Text>
                         </div>
                         {index === 0 && <Tag color="green">Mejor saldo</Tag>}
