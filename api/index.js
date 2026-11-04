@@ -8,6 +8,12 @@ const localDbPath = path.join(process.cwd(), '.data', 'local-db.json')
 const localSavingsPath = path.join(process.cwd(), '.data', 'savings-simulation.json')
 const savingsBlobPath = 'balance/savings-simulation.json'
 const expenseCategories = ['general', 'vivienda', 'comida', 'transporte', 'hijos', 'tarjeta', 'salud', 'ocio']
+const marketAssets = {
+  MELI: { symbol: 'MELI', name: 'Mercado Libre' },
+  AAPL: { symbol: 'AAPL', name: 'Apple' },
+  YPF: { symbol: 'YPF', name: 'YPF (Argentina)' },
+  NVDA: { symbol: 'NVDA', name: 'Nvidia' },
+}
 
 let cached = global.mongooseConnection
 if (!cached) cached = global.mongooseConnection = { conn: null, promise: null }
@@ -141,6 +147,37 @@ async function savingsHandler(req, res) {
     return send(res, 200, state)
   }
   return send(res, 405, { error: 'Method not allowed' })
+}
+
+async function marketHistoryHandler(req, res, url) {
+  const requestedSymbol = String(url.searchParams.get('symbol') || '').toUpperCase()
+  const asset = marketAssets[requestedSymbol]
+  const startMonth = url.searchParams.get('start')
+  const endMonth = url.searchParams.get('end')
+  if (!asset || !/^\d{4}-\d{2}$/.test(startMonth) || !/^\d{4}-\d{2}$/.test(endMonth)) {
+    return send(res, 400, { error: 'Símbolo o período inválido' })
+  }
+
+  const start = Math.floor(Date.UTC(Number(startMonth.slice(0, 4)), Number(startMonth.slice(5, 7)) - 1, 1) / 1000)
+  const end = Math.floor(Date.UTC(Number(endMonth.slice(0, 4)), Number(endMonth.slice(5, 7)), 1) / 1000)
+  const endpoint = `https://query1.finance.yahoo.com/v8/finance/chart/${asset.symbol}?period1=${start}&period2=${end}&interval=1d&events=history`
+  const response = await fetch(endpoint, { headers: { 'User-Agent': 'balance-savings-simulator/1.0' } })
+  if (!response.ok) throw new Error(`No se pudo consultar el historial de ${asset.name}`)
+  const payload = await response.json()
+  const result = payload.chart?.result?.[0]
+  const timestamps = result?.timestamp || []
+  const closes = result?.indicators?.quote?.[0]?.close || []
+  const monthly = {}
+  let finalPrice = 0
+  timestamps.forEach((timestamp, index) => {
+    const close = Number(closes[index])
+    if (!Number.isFinite(close) || close <= 0) return
+    const month = new Date(timestamp * 1000).toISOString().slice(0, 7)
+    if (!monthly[month]) monthly[month] = close
+    finalPrice = close
+  })
+  if (!Object.keys(monthly).length) throw new Error(`No hay cotizaciones disponibles para ${asset.name}`)
+  return send(res, 200, { symbol: asset.symbol, name: asset.name, prices: monthly, finalPrice })
 }
 
 function send(res, status, data) {
@@ -658,6 +695,7 @@ async function handler(req, res) {
 
     if (resource === 'health') return send(res, 200, { ok: true })
     if (resource === 'savings') return await savingsHandler(req, res)
+    if (resource === 'market-history' && req.method === 'GET') return await marketHistoryHandler(req, res, url)
     if (!process.env.MONGODB_URI) {
       if (process.env.VERCEL) {
         return send(res, 500, {

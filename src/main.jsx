@@ -308,6 +308,12 @@ function CategorySummary({ open, onToggle, totals = {} }) {
 }
 
 const savingsStorageKey = 'balance.savings-simulations.v1'
+const marketAssets = [
+  { value: 'MELI', label: 'Mercado Libre (MELI)' },
+  { value: 'AAPL', label: 'Apple (AAPL)' },
+  { value: 'YPF', label: 'YPF (Argentina)' },
+  { value: 'NVDA', label: 'Nvidia (NVDA)' },
+]
 
 function monthValue(value) {
   return value?.format('YYYY-MM') || value
@@ -338,10 +344,21 @@ function emptySavingsItem(index = 1) {
   }
 }
 
-function savingsItemSchedule(item, months) {
+function savingsItemSchedule(item, months, marketHistory) {
   let balance = 0
+  let shares = 0
+  let contributed = 0
   return months.map((month) => {
     const contribution = Math.max(Number(item.monthlyContribution || 0), 0)
+    if (item.method === 'market') {
+      const price = marketHistory?.prices?.[month]
+      if (!price) return { month, contribution: 0, interest: 0, balance: 0, unavailable: true }
+      shares += contribution / price
+      contributed += contribution
+      balance = shares * price
+      const interest = balance - (contributed - contribution) - contribution
+      return { month, contribution, interest, balance, shares, price }
+    }
     const base = balance + contribution
     const annualRate = Math.max(Number(item.annualRate || 0), 0) / 100
     const rate = item.method === 'fixed-term'
@@ -363,6 +380,7 @@ function SavingsSimulator() {
   const [loading, setLoading] = useState(true)
   const [savingSimulation, setSavingSimulation] = useState(false)
   const [storageError, setStorageError] = useState('')
+  const [marketHistory, setMarketHistory] = useState({})
   const [startMonth, setStartMonth] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem(savingsStorageKey) || 'null')?.startMonth || defaultStart
@@ -416,10 +434,23 @@ function SavingsSimulator() {
 
   const validRange = startMonth <= endMonth
   const months = useMemo(() => validRange ? monthRange(startMonth, endMonth) : [], [startMonth, endMonth, validRange])
+  const marketSymbols = useMemo(() => [...new Set(items.filter((item) => item.method === 'market').map((item) => item.asset || 'MELI'))], [items])
+  useEffect(() => {
+    if (!validRange || !marketSymbols.length) return undefined
+    let ignore = false
+    Promise.all(marketSymbols.map(async (symbol) => [symbol, await api(`market-history?symbol=${symbol}&start=${startMonth}&end=${endMonth}`)]))
+      .then((results) => {
+        if (!ignore) setMarketHistory(Object.fromEntries(results))
+      })
+      .catch((error) => {
+        if (!ignore) setStorageError(error.message)
+      })
+    return () => { ignore = true }
+  }, [endMonth, marketSymbols, startMonth, validRange])
   const schedules = useMemo(() => items.map((item) => ({
     item,
-    rows: savingsItemSchedule(item, months),
-  })), [items, months])
+    rows: savingsItemSchedule(item, months, marketHistory[item.asset || 'MELI']),
+  })), [items, marketHistory, months])
   const totals = useMemo(() => months.map((month, index) => schedules.reduce((acc, schedule) => {
     const row = schedule.rows[index]
     acc.contribution += row?.contribution || 0
@@ -513,17 +544,21 @@ function SavingsSimulator() {
                   <Select
                     value={item.method}
                     onChange={(value) => updateItem(item.id, { method: value })}
-                    options={[{ value: 'fixed-term', label: 'Plazo fijo mensual' }, { value: 'caucion', label: 'Caución diaria' }]}
+                    options={[{ value: 'fixed-term', label: 'Plazo fijo mensual' }, { value: 'caucion', label: 'Caución diaria' }, { value: 'market', label: 'Acciones' }]}
                   />
                 </Col>
+                {item.method === 'market' && <Col xs={24} sm={12} md={5}>
+                  <Text className="control-label">Activo</Text>
+                  <Select value={item.asset || 'MELI'} onChange={(value) => updateItem(item.id, { asset: value })} options={marketAssets} />
+                </Col>}
                 <Col xs={24} sm={12} md={5}>
                   <Text className="control-label">Aporte mensual</Text>
                   <InputNumber min={0} controls={false} prefix="$" value={item.monthlyContribution} onChange={(value) => updateItem(item.id, { monthlyContribution: value ?? 0 })} />
                 </Col>
-                <Col xs={24} sm={12} md={5}>
+                {item.method !== 'market' && <Col xs={24} sm={12} md={5}>
                   <Text className="control-label">Tasa anual</Text>
                   <InputNumber min={0} controls={false} suffix="%" value={item.annualRate} onChange={(value) => updateItem(item.id, { annualRate: value ?? 0 })} />
-                </Col>
+                </Col>}
                 <Col xs={24} md={4}>
                   <Button danger type="text" icon={<DeleteOutlined />} onClick={() => removeItem(item.id)} disabled={items.length === 1}>Quitar</Button>
                 </Col>
@@ -554,7 +589,7 @@ function SavingsSimulator() {
                         <div>
                           <Text strong>{item.name || 'Sin nombre'}</Text>
                           <Text className="savings-method-type" type="secondary">
-                            {item.method === 'fixed-term' ? 'Plazo fijo mensual' : 'Caución diaria'}
+                            {item.method === 'fixed-term' ? 'Plazo fijo mensual' : item.method === 'caucion' ? 'Caución diaria' : `${marketAssets.find((asset) => asset.value === (item.asset || 'MELI'))?.label || 'Acciones'} · histórico`}
                           </Text>
                         </div>
                         {index === 0 && <Tag color="green">Mejor saldo</Tag>}
