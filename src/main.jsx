@@ -8,6 +8,7 @@ import {
   Col,
   ConfigProvider,
   DatePicker,
+  Divider,
   Empty,
   Flex,
   Form,
@@ -302,6 +303,207 @@ function CategorySummary({ open, onToggle, totals = {} }) {
           ))}
         </div>
       )}
+    </section>
+  )
+}
+
+const savingsStorageKey = 'balance.savings-simulations.v1'
+
+function monthValue(value) {
+  return value?.format('YYYY-MM') || value
+}
+
+function monthRange(start, end) {
+  const months = []
+  let cursor = dayjs(`${start}-01`)
+  const last = dayjs(`${end}-01`)
+  while (cursor.isBefore(last) || cursor.isSame(last, 'month')) {
+    months.push(cursor.format('YYYY-MM'))
+    cursor = cursor.add(1, 'month')
+  }
+  return months
+}
+
+function monthDays(month) {
+  return dayjs(`${month}-01`).daysInMonth()
+}
+
+function emptySavingsItem(index = 1) {
+  return {
+    id: `savings-${Date.now()}-${index}`,
+    name: index === 1 ? 'Plazo fijo' : `Ahorro ${index}`,
+    method: 'fixed-term',
+    monthlyContribution: 100000,
+    annualRate: 40,
+  }
+}
+
+function savingsItemSchedule(item, months) {
+  let balance = 0
+  return months.map((month) => {
+    const contribution = Math.max(Number(item.monthlyContribution || 0), 0)
+    const base = balance + contribution
+    const annualRate = Math.max(Number(item.annualRate || 0), 0) / 100
+    const rate = item.method === 'fixed-term'
+      ? Math.pow(1 + annualRate, 1 / 12) - 1
+      : Math.pow(1 + annualRate, 1 / 365) - 1
+    const interest = base * (Math.pow(1 + rate, item.method === 'fixed-term' ? 1 : monthDays(month)) - 1)
+    balance = base + interest
+    return { month, contribution, interest, balance }
+  })
+}
+
+function formatSavingsNumber(value) {
+  return money.format(Math.round(value || 0))
+}
+
+function SavingsSimulator() {
+  const defaultStart = dayjs().format('YYYY-MM')
+  const defaultEnd = dayjs().add(12, 'month').format('YYYY-MM')
+  const [startMonth, setStartMonth] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(savingsStorageKey) || 'null')?.startMonth || defaultStart
+    } catch {
+      return defaultStart
+    }
+  })
+  const [endMonth, setEndMonth] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(savingsStorageKey) || 'null')?.endMonth || defaultEnd
+    } catch {
+      return defaultEnd
+    }
+  })
+  const [items, setItems] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(savingsStorageKey) || 'null')
+      return Array.isArray(saved?.items) && saved.items.length ? saved.items : [emptySavingsItem()]
+    } catch {
+      return [emptySavingsItem()]
+    }
+  })
+  const [saved, setSaved] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(savingsStorageKey) || 'null')?.saved || false
+    } catch {
+      return false
+    }
+  })
+
+  const validRange = startMonth <= endMonth
+  const months = useMemo(() => validRange ? monthRange(startMonth, endMonth) : [], [startMonth, endMonth, validRange])
+  const schedules = useMemo(() => items.map((item) => ({
+    item,
+    rows: savingsItemSchedule(item, months),
+  })), [items, months])
+  const totals = useMemo(() => months.map((month, index) => schedules.reduce((acc, schedule) => {
+    const row = schedule.rows[index]
+    acc.contribution += row?.contribution || 0
+    acc.interest += row?.interest || 0
+    acc.balance += row?.balance || 0
+    return acc
+  }, { month, contribution: 0, interest: 0, balance: 0 })), [months, schedules])
+  const finalTotal = totals.at(-1)?.balance || 0
+  const totalContributions = totals.reduce((sum, row) => sum + row.contribution, 0)
+  const totalInterest = finalTotal - totalContributions
+
+  function updateItem(id, patch) {
+    setItems((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item))
+    setSaved(false)
+  }
+
+  function addItem() {
+    setItems((current) => [...current, emptySavingsItem(current.length + 1)])
+    setSaved(false)
+  }
+
+  function removeItem(id) {
+    setItems((current) => current.filter((item) => item.id !== id))
+    setSaved(false)
+  }
+
+  function saveSimulation() {
+    localStorage.setItem(savingsStorageKey, JSON.stringify({ startMonth, endMonth, items, saved: true }))
+    setSaved(true)
+  }
+
+  return (
+    <section className="savings-section">
+      <Flex justify="space-between" align="center" className="section-title">
+        <Space align="center">
+          <Title level={3}>Simulador de ahorro</Title>
+          <Tag color="blue">Local</Tag>
+        </Space>
+        <Button type="primary" onClick={saveSimulation}>Guardar simulación</Button>
+      </Flex>
+      <Card className="savings-card" variant="borderless">
+        <Row gutter={[12, 12]} align="bottom">
+          <Col xs={24} sm={12} md={5}>
+            <Text className="control-label">Desde</Text>
+            <DatePicker picker="month" value={dayjs(`${startMonth}-01`)} onChange={(value) => setStartMonth(monthValue(value))} allowClear={false} />
+          </Col>
+          <Col xs={24} sm={12} md={5}>
+            <Text className="control-label">Hasta</Text>
+            <DatePicker picker="month" value={dayjs(`${endMonth}-01`)} onChange={(value) => setEndMonth(monthValue(value))} allowClear={false} />
+          </Col>
+          <Col xs={24} md={14}>
+            <Text type="secondary">Cada método aporta al comienzo de cada mes y reinvierte los intereses automáticamente.</Text>
+          </Col>
+        </Row>
+        {!validRange && <Alert className="savings-alert" type="warning" showIcon message="La fecha final debe ser igual o posterior a la inicial." />}
+
+        <Divider />
+        <Space orientation="vertical" size={12} className="savings-items">
+          {items.map((item) => (
+            <Card key={item.id} size="small" className="savings-item" variant="outlined">
+              <Row gutter={[10, 10]} align="bottom">
+                <Col xs={24} sm={12} md={5}>
+                  <Text className="control-label">Nombre</Text>
+                  <Input value={item.name} onChange={(event) => updateItem(item.id, { name: event.target.value })} />
+                </Col>
+                <Col xs={24} sm={12} md={5}>
+                  <Text className="control-label">Método</Text>
+                  <Select
+                    value={item.method}
+                    onChange={(value) => updateItem(item.id, { method: value })}
+                    options={[{ value: 'fixed-term', label: 'Plazo fijo mensual' }, { value: 'caucion', label: 'Caución diaria' }]}
+                  />
+                </Col>
+                <Col xs={24} sm={12} md={5}>
+                  <Text className="control-label">Aporte mensual</Text>
+                  <InputNumber min={0} controls={false} prefix="$" value={item.monthlyContribution} onChange={(value) => updateItem(item.id, { monthlyContribution: value ?? 0 })} />
+                </Col>
+                <Col xs={24} sm={12} md={5}>
+                  <Text className="control-label">Tasa anual</Text>
+                  <InputNumber min={0} controls={false} suffix="%" value={item.annualRate} onChange={(value) => updateItem(item.id, { annualRate: value ?? 0 })} />
+                </Col>
+                <Col xs={24} md={4}>
+                  <Button danger type="text" icon={<DeleteOutlined />} onClick={() => removeItem(item.id)} disabled={items.length === 1}>Quitar</Button>
+                </Col>
+              </Row>
+            </Card>
+          ))}
+        </Space>
+        <Button className="savings-add" icon={<PlusOutlined />} onClick={addItem}>Agregar método</Button>
+
+        {validRange && (
+          <>
+            <Divider />
+            <Row gutter={[12, 12]} className="savings-summary">
+              <Col xs={24} sm={8}><Statistic title="Aportes totales" value={totalContributions} formatter={(value) => formatSavingsNumber(value)} /></Col>
+              <Col xs={24} sm={8}><Statistic title="Intereses estimados" value={totalInterest} formatter={(value) => formatSavingsNumber(value)} /></Col>
+              <Col xs={24} sm={8}><Statistic title="Saldo final estimado" value={finalTotal} formatter={(value) => formatSavingsNumber(value)} /></Col>
+            </Row>
+            <div className="savings-table-wrap">
+              <table className="savings-table">
+                <thead><tr><th>Mes</th><th>Aportes</th><th>Intereses</th><th>Saldo acumulado</th></tr></thead>
+                <tbody>{totals.map((row) => <tr key={row.month}><td>{dayjs(`${row.month}-01`).format('MMM YYYY')}</td><td>{formatSavingsNumber(row.contribution)}</td><td>{formatSavingsNumber(row.interest)}</td><td><strong>{formatSavingsNumber(row.balance)}</strong></td></tr>)}</tbody>
+              </table>
+            </div>
+          </>
+        )}
+        {saved && <Text className="savings-saved" type="success">Simulación guardada localmente en este dispositivo.</Text>}
+      </Card>
     </section>
   )
 }
@@ -1087,6 +1289,8 @@ function AppContent() {
           </Space>
         </Col>
       </Row>
+
+      <SavingsSimulator />
     </main>
   )
 }
