@@ -334,7 +334,7 @@ function emptySavingsItem(index = 1) {
     id: `savings-${Date.now()}-${index}`,
     name: index === 1 ? 'Plazo fijo' : `Ahorro ${index}`,
     method: 'fixed-term',
-    monthlyContribution: 100000,
+    monthlyContribution: 1000,
     annualRate: 40,
   }
 }
@@ -347,29 +347,32 @@ function savingsItemSchedule(item, months, marketHistory, fxHistory) {
     const contribution = Math.max(Number(item.monthlyContribution || 0), 0)
     if (item.method === 'market') {
       const price = marketHistory?.prices?.[month]
-      const fxPrice = fxHistory?.prices?.[month]
-      if (!price || !fxPrice) return { month, contribution: 0, interest: 0, balance: 0, usdBalance: 0, unavailable: true }
+      if (!price) return { month, contribution: 0, interest: 0, balance: 0, usdBalance: 0, unavailable: true }
       const previousBalance = balance
-      const usdContribution = contribution / fxPrice
-      shares += usdContribution / price
+      const usdContribution = contribution
+      shares += contribution / price
       usdBalance = shares * price
-      balance = usdBalance * (fxHistory.finalPrice || fxPrice)
+      balance = usdBalance
       const interest = balance - previousBalance - contribution
-      return { month, contribution, interest, balance, usdBalance, usdContribution, shares, price, fxPrice }
+      return { month, contribution, interest, balance, usdBalance, usdContribution, shares, price }
     }
+    const fxRate = fxHistory?.finalPrice
+    if (!fxRate) return { month, contribution: 0, interest: 0, balance: 0, unavailable: true }
     const base = balance + contribution
     const annualRate = Math.max(Number(item.annualRate || 0), 0) / 100
     const rate = item.method === 'fixed-term'
       ? Math.pow(1 + annualRate, 1 / 12) - 1
       : Math.pow(1 + annualRate, 1 / 365) - 1
-    const interest = base * (Math.pow(1 + rate, item.method === 'fixed-term' ? 1 : monthDays(month)) - 1)
-    balance = base + interest
+    const basePesos = base * fxRate
+    const interestPesos = basePesos * (Math.pow(1 + rate, item.method === 'fixed-term' ? 1 : monthDays(month)) - 1)
+    const interest = interestPesos / fxRate
+    balance = (basePesos + interestPesos) / fxRate
     return { month, contribution, interest, balance }
   })
 }
 
 function formatSavingsNumber(value) {
-  return money.format(Math.round(value || 0))
+  return formatUsdNumber(value)
 }
 
 function formatUsdNumber(value) {
@@ -472,8 +475,7 @@ function SavingsSimulator({ mode = 'simulation' }) {
     const contributions = rows.reduce((sum, row) => sum + row.contribution, 0)
     const interest = rows.reduce((sum, row) => sum + row.interest, 0)
     const balance = rows.at(-1)?.balance || 0
-    const currentFx = marketHistory.USDARS?.finalPrice || 1
-    const usdBalance = item.method === 'market' ? (rows.at(-1)?.usdBalance || 0) : balance / currentFx
+    const usdBalance = item.method === 'market' ? (rows.at(-1)?.usdBalance || 0) : balance
     return { item, contributions, interest, balance, usdBalance }
   }), [marketHistory, schedules])
   const rankedMethods = useMemo(() => [...methodTotals].sort((a, b) => b.balance - a.balance), [methodTotals])
@@ -517,7 +519,7 @@ function SavingsSimulator({ mode = 'simulation' }) {
       <Flex justify="space-between" align="center" className="section-title">
         <Space align="center">
           <Title level={3}>{pageTitle}</Title>
-          <Tag color={isProductive ? 'green' : 'blue'}>{isProductive ? 'Productivo' : 'Simulación'}</Tag>
+          <Space size={4}><Tag color={isProductive ? 'green' : 'blue'}>{isProductive ? 'Productivo' : 'Simulación'}</Tag><Tag>USD</Tag></Space>
         </Space>
         <Button type="primary" loading={savingSimulation} onClick={saveSimulation}>{isProductive ? 'Guardar ahorros' : 'Guardar simulación'}</Button>
       </Flex>
@@ -534,7 +536,7 @@ function SavingsSimulator({ mode = 'simulation' }) {
             <DatePicker picker="month" value={dayjs(`${endMonth}-01`)} onChange={(value) => setEndMonth(monthValue(value))} allowClear={false} />
           </Col>
           <Col xs={24} md={14}>
-            <Text type="secondary">Cada método aporta al comienzo de cada mes y reinvierte los intereses automáticamente.</Text>
+            <Text type="secondary">Los aportes y resultados se expresan en USD. Plazo fijo y caución se calculan internamente en pesos usando el dólar de referencia actual.</Text>
           </Col>
         </Row>
         {!validRange && <Alert className="savings-alert" type="warning" showIcon message="La fecha final debe ser igual o posterior a la inicial." />}
@@ -566,8 +568,8 @@ function SavingsSimulator({ mode = 'simulation' }) {
                   />
                 </Col>}
                 <Col xs={24} sm={12} md={5}>
-                  <Text className="control-label">Aporte mensual</Text>
-                  <InputNumber min={0} controls={false} prefix="$" value={item.monthlyContribution} onChange={(value) => updateItem(item.id, { monthlyContribution: value ?? 0 })} />
+                  <Text className="control-label">Aporte mensual (USD)</Text>
+                  <InputNumber min={0} controls={false} prefix="USD" value={item.monthlyContribution} onChange={(value) => updateItem(item.id, { monthlyContribution: value ?? 0 })} />
                 </Col>
                 {item.method !== 'market' && <Col xs={24} sm={12} md={5}>
                   <Text className="control-label">Tasa anual</Text>
@@ -608,12 +610,12 @@ function SavingsSimulator({ mode = 'simulation' }) {
                         </div>
                         {index === 0 && <Tag color="green">Mejor saldo</Tag>}
                       </Flex>
-                      <Statistic title="Saldo final" value={balance} formatter={(value) => formatSavingsNumber(value)} />
+                      <Statistic title="Saldo final (USD)" value={balance} formatter={(value) => formatSavingsNumber(value)} />
                       <Progress percent={bestMethodBalance ? Math.round((balance / bestMethodBalance) * 100) : 0} showInfo={false} strokeColor="#1677ff" />
                       <div className="savings-method-metrics">
                         <span><Text type="secondary">Aportes</Text><strong>{formatSavingsNumber(contributions)}</strong></span>
                         <span><Text type="secondary">Intereses</Text><strong>{formatSavingsNumber(interest)}</strong></span>
-                        <span className="savings-usd-metric"><Text type="secondary">Equivalente USD</Text><strong>{formatUsdNumber(usdBalance)}</strong></span>
+                        <span className="savings-usd-metric"><Text type="secondary">Saldo en USD</Text><strong>{formatUsdNumber(usdBalance)}</strong></span>
                       </div>
                     </Card>
                   </Col>
