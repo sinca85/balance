@@ -1116,6 +1116,18 @@ function AppContent() {
   const [entryMode, setEntryMode] = useState('create')
   const [refreshing, setRefreshing] = useState(false)
   const [showCategorySummary, setShowCategorySummary] = useState(false)
+  const [activeSection, setActiveSection] = useState(() => window.location.hash === '#savings' ? 'savings' : 'balance')
+
+  useEffect(() => {
+    const onHashChange = () => setActiveSection(window.location.hash === '#savings' ? 'savings' : 'balance')
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+
+  function navigateSection(section) {
+    window.location.hash = section === 'savings' ? 'savings' : 'balance'
+    setActiveSection(section)
+  }
 
   async function load() {
     try {
@@ -1208,8 +1220,12 @@ function AppContent() {
   return (
     <main>
       <header className="hero">
+        <nav className="site-nav" aria-label="Secciones">
+          <Button type={activeSection === 'balance' ? 'primary' : 'text'} onClick={() => navigateSection('balance')}>Balance</Button>
+          <Button type={activeSection === 'savings' ? 'primary' : 'text'} onClick={() => navigateSection('savings')}>Simulación de ahorro</Button>
+        </nav>
         <Space orientation="vertical" size={6}>
-          <Space align="center">
+          {activeSection === 'balance' && <Space align="center">
             <Tag color="blue" icon={<CalendarOutlined />}>Control mensual</Tag>
             <Tooltip title="Actualizar">
               <Button
@@ -1221,11 +1237,12 @@ function AppContent() {
                 aria-label="Actualizar"
               />
             </Tooltip>
-          </Space>
-          <Text type="secondary">Sueldo, alimentos, gastos, fijos, prestamos y saldo estimado en una sola vista.</Text>
+          </Space>}
+          <Text type="secondary">{activeSection === 'balance' ? 'Sueldo, alimentos, gastos, fijos, prestamos y saldo estimado en una sola vista.' : 'Proyección de aportes e intereses compuestos a lo largo del tiempo.'}</Text>
         </Space>
       </header>
 
+      {activeSection === 'balance' ? <>
       {error && <Alert className="app-alert" type="error" title={error} showIcon />}
       <Toolbar
         month={month}
@@ -1328,8 +1345,7 @@ function AppContent() {
           </Space>
         </Col>
       </Row>
-
-      <SavingsSimulator />
+      </> : <SavingsSimulator />}
     </main>
   )
 }

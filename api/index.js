@@ -96,6 +96,7 @@ async function writeLocalDb(db) {
 
 async function readSavingsState() {
   if (process.env.VERCEL || process.env.BLOB_READ_WRITE_TOKEN) {
+    if (!process.env.BLOB_READ_WRITE_TOKEN) throw new Error('Missing BLOB_READ_WRITE_TOKEN. Create and link a private Vercel Blob Store.')
     const blob = await get(savingsBlobPath, { access: 'private' })
     if (!blob) return { startMonth: '', endMonth: '', items: [] }
     return JSON.parse(await new Response(blob.stream).text())
@@ -112,6 +113,7 @@ async function readSavingsState() {
 async function writeSavingsState(state) {
   const payload = JSON.stringify(state, null, 2)
   if (process.env.VERCEL || process.env.BLOB_READ_WRITE_TOKEN) {
+    if (!process.env.BLOB_READ_WRITE_TOKEN) throw new Error('Missing BLOB_READ_WRITE_TOKEN. Create and link a private Vercel Blob Store.')
     await put(savingsBlobPath, payload, {
       access: 'private',
       addRandomSuffix: false,

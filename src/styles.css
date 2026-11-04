@@ -26,6 +26,17 @@ main {
   margin-bottom: 12px;
 }
 
+.site-nav {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 4px;
+  border: 1px solid #e6eaf0;
+  border-radius: 8px;
+  background: #ffffff;
+  width: fit-content;
+}
+
 .hero .ant-typography {
   margin: 0;
 }
