@@ -436,6 +436,8 @@ function SavingsSimulator() {
     const interest = rows.reduce((sum, row) => sum + row.interest, 0)
     return { item, contributions, interest, balance: rows.at(-1)?.balance || 0 }
   }), [schedules])
+  const rankedMethods = useMemo(() => [...methodTotals].sort((a, b) => b.balance - a.balance), [methodTotals])
+  const bestMethodBalance = rankedMethods[0]?.balance || 0
 
   function updateItem(id, patch) {
     setItems((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item))
@@ -539,6 +541,35 @@ function SavingsSimulator() {
               <Col xs={24} sm={8}><Statistic title="Intereses estimados" value={totalInterest} formatter={(value) => formatSavingsNumber(value)} /></Col>
               <Col xs={24} sm={8}><Statistic title="Saldo final estimado" value={finalTotal} formatter={(value) => formatSavingsNumber(value)} /></Col>
             </Row>
+            <section className="savings-comparison" aria-label="Comparación de métodos de ahorro">
+              <Flex justify="space-between" align="center" className="savings-subsection-title">
+                <Title level={4}>Comparación por método</Title>
+                <Text type="secondary">Ordenado por saldo final</Text>
+              </Flex>
+              <Row gutter={[12, 12]}>
+                {rankedMethods.map(({ item, contributions, interest, balance }, index) => (
+                  <Col key={item.id} xs={24} sm={12} lg={6}>
+                    <Card className="savings-method-card" size="small">
+                      <Flex justify="space-between" align="start" gap={8}>
+                        <div>
+                          <Text strong>{item.name || 'Sin nombre'}</Text>
+                          <Text className="savings-method-type" type="secondary">
+                            {item.method === 'fixed-term' ? 'Plazo fijo mensual' : 'Caución diaria'}
+                          </Text>
+                        </div>
+                        {index === 0 && <Tag color="green">Mejor saldo</Tag>}
+                      </Flex>
+                      <Statistic title="Saldo final" value={balance} formatter={(value) => formatSavingsNumber(value)} />
+                      <Progress percent={bestMethodBalance ? Math.round((balance / bestMethodBalance) * 100) : 0} showInfo={false} strokeColor="#1677ff" />
+                      <div className="savings-method-metrics">
+                        <span><Text type="secondary">Aportes</Text><strong>{formatSavingsNumber(contributions)}</strong></span>
+                        <span><Text type="secondary">Intereses</Text><strong>{formatSavingsNumber(interest)}</strong></span>
+                      </div>
+                    </Card>
+                  </Col>
+                ))}
+              </Row>
+            </section>
             <div className="savings-table-wrap">
               <table className="savings-table">
                 <thead>
