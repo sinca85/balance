@@ -339,19 +339,23 @@ function emptySavingsItem(index = 1) {
   }
 }
 
-function savingsItemSchedule(item, months, marketHistory) {
+function savingsItemSchedule(item, months, marketHistory, fxHistory) {
   let balance = 0
   let shares = 0
+  let usdBalance = 0
   return months.map((month) => {
     const contribution = Math.max(Number(item.monthlyContribution || 0), 0)
     if (item.method === 'market') {
       const price = marketHistory?.prices?.[month]
-      if (!price) return { month, contribution: 0, interest: 0, balance: 0, unavailable: true }
+      const fxPrice = fxHistory?.prices?.[month]
+      if (!price || !fxPrice) return { month, contribution: 0, interest: 0, balance: 0, usdBalance: 0, unavailable: true }
       const previousBalance = balance
-      shares += contribution / price
-      balance = shares * price
+      const usdContribution = contribution / fxPrice
+      shares += usdContribution / price
+      usdBalance = shares * price
+      balance = usdBalance * (fxHistory.finalPrice || fxPrice)
       const interest = balance - previousBalance - contribution
-      return { month, contribution, interest, balance, shares, price }
+      return { month, contribution, interest, balance, usdBalance, usdContribution, shares, price, fxPrice }
     }
     const base = balance + contribution
     const annualRate = Math.max(Number(item.annualRate || 0), 0) / 100
@@ -366,6 +370,10 @@ function savingsItemSchedule(item, months, marketHistory) {
 
 function formatSavingsNumber(value) {
   return money.format(Math.round(value || 0))
+}
+
+function formatUsdNumber(value) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Math.round(value || 0))
 }
 
 function SavingsSimulator({ mode = 'simulation' }) {
@@ -432,7 +440,7 @@ function SavingsSimulator({ mode = 'simulation' }) {
 
   const validRange = startMonth <= endMonth
   const months = useMemo(() => validRange ? monthRange(startMonth, endMonth) : [], [startMonth, endMonth, validRange])
-  const marketSymbols = useMemo(() => [...new Set(items.filter((item) => item.method === 'market').map((item) => item.asset || 'MELI'))], [items])
+  const marketSymbols = useMemo(() => [...new Set(['USDARS', ...items.filter((item) => item.method === 'market').map((item) => item.asset || 'MELI')])], [items])
   useEffect(() => {
     if (!validRange || !marketSymbols.length) return undefined
     let ignore = false
@@ -447,7 +455,7 @@ function SavingsSimulator({ mode = 'simulation' }) {
   }, [endMonth, marketSymbols, startMonth, validRange])
   const schedules = useMemo(() => items.map((item) => ({
     item,
-    rows: savingsItemSchedule(item, months, marketHistory[item.asset || 'MELI']),
+    rows: savingsItemSchedule(item, months, marketHistory[item.asset || 'MELI'], marketHistory.USDARS),
   })), [items, marketHistory, months])
   const totals = useMemo(() => months.map((month, index) => schedules.reduce((acc, schedule) => {
     const row = schedule.rows[index]
@@ -463,8 +471,11 @@ function SavingsSimulator({ mode = 'simulation' }) {
   const methodTotals = useMemo(() => schedules.map(({ item, rows }) => {
     const contributions = rows.reduce((sum, row) => sum + row.contribution, 0)
     const interest = rows.reduce((sum, row) => sum + row.interest, 0)
-    return { item, contributions, interest, balance: rows.at(-1)?.balance || 0 }
-  }), [schedules])
+    const balance = rows.at(-1)?.balance || 0
+    const currentFx = marketHistory.USDARS?.finalPrice || 1
+    const usdBalance = item.method === 'market' ? (rows.at(-1)?.usdBalance || 0) : balance / currentFx
+    return { item, contributions, interest, balance, usdBalance }
+  }), [marketHistory, schedules])
   const rankedMethods = useMemo(() => [...methodTotals].sort((a, b) => b.balance - a.balance), [methodTotals])
   const bestMethodBalance = rankedMethods[0]?.balance || 0
 
@@ -585,7 +596,7 @@ function SavingsSimulator({ mode = 'simulation' }) {
                 <Text type="secondary">Ordenado por saldo final</Text>
               </Flex>
               <Row gutter={[12, 12]}>
-                {rankedMethods.map(({ item, contributions, interest, balance }, index) => (
+                {rankedMethods.map(({ item, contributions, interest, balance, usdBalance }, index) => (
                   <Col key={item.id} xs={24} sm={12} lg={6}>
                     <Card className="savings-method-card" size="small">
                       <Flex justify="space-between" align="start" gap={8}>
@@ -602,6 +613,7 @@ function SavingsSimulator({ mode = 'simulation' }) {
                       <div className="savings-method-metrics">
                         <span><Text type="secondary">Aportes</Text><strong>{formatSavingsNumber(contributions)}</strong></span>
                         <span><Text type="secondary">Intereses</Text><strong>{formatSavingsNumber(interest)}</strong></span>
+                        <span className="savings-usd-metric"><Text type="secondary">Equivalente USD</Text><strong>{formatUsdNumber(usdBalance)}</strong></span>
                       </div>
                     </Card>
                   </Col>

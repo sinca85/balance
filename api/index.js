@@ -147,7 +147,8 @@ async function savingsHandler(req, res, storage) {
 
 async function marketHistoryHandler(req, res, url) {
   const requestedSymbol = String(url.searchParams.get('symbol') || '').toUpperCase()
-  const asset = /^[A-Z0-9.-]{1,15}$/.test(requestedSymbol) ? { symbol: requestedSymbol, name: requestedSymbol } : null
+  const marketSymbol = requestedSymbol === 'USDARS' ? 'ARS=X' : requestedSymbol
+  const asset = /^[A-Z0-9.=-]{1,15}$/.test(marketSymbol) ? { symbol: marketSymbol, name: requestedSymbol } : null
   const startMonth = url.searchParams.get('start')
   const endMonth = url.searchParams.get('end')
   if (!asset || !/^\d{4}-\d{2}$/.test(startMonth) || !/^\d{4}-\d{2}$/.test(endMonth)) {
@@ -164,7 +165,7 @@ async function marketHistoryHandler(req, res, url) {
   const historyStartMonth = addMonths(historyEndMonth, -(periodLength - 1))
   const start = Math.floor(Date.UTC(Number(historyStartMonth.slice(0, 4)), Number(historyStartMonth.slice(5, 7)) - 1, 1) / 1000)
   const end = Math.floor(Date.UTC(Number(historyEndMonth.slice(0, 4)), Number(historyEndMonth.slice(5, 7)), 1) / 1000)
-  const endpoint = `https://query1.finance.yahoo.com/v8/finance/chart/${asset.symbol}?period1=${start}&period2=${end}&interval=1d&events=history`
+  const endpoint = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(asset.symbol)}?period1=${start}&period2=${end}&interval=1d&events=history`
   const response = await fetch(endpoint, { headers: { 'User-Agent': 'balance-savings-simulator/1.0' } })
   if (!response.ok) throw new Error(`No se pudo consultar el historial de ${asset.name}`)
   const payload = await response.json()
@@ -188,7 +189,7 @@ async function marketHistoryHandler(req, res, url) {
       monthly[historicalMonths[index]] || monthly[historicalMonths.at(-1)],
     ])
   )
-  return send(res, 200, { symbol: asset.symbol, name: asset.name, prices, finalPrice })
+  return send(res, 200, { symbol: requestedSymbol, name: asset.name, prices, finalPrice })
 }
 
 function send(res, status, data) {
