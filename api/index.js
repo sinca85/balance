@@ -117,6 +117,7 @@ async function writeSavingsState(state) {
     await put(savingsBlobPath, payload, {
       access: 'private',
       addRandomSuffix: false,
+      allowOverwrite: true,
       contentType: 'application/json',
     })
     return
