@@ -360,6 +360,9 @@ function formatSavingsNumber(value) {
 function SavingsSimulator() {
   const defaultStart = dayjs().format('YYYY-MM')
   const defaultEnd = dayjs().add(12, 'month').format('YYYY-MM')
+  const [loading, setLoading] = useState(true)
+  const [savingSimulation, setSavingSimulation] = useState(false)
+  const [storageError, setStorageError] = useState('')
   const [startMonth, setStartMonth] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem(savingsStorageKey) || 'null')?.startMonth || defaultStart
@@ -389,6 +392,27 @@ function SavingsSimulator() {
       return false
     }
   })
+
+  useEffect(() => {
+    let ignore = false
+    api('savings')
+      .then((state) => {
+        if (ignore) return
+        if (state.startMonth) setStartMonth(state.startMonth)
+        if (state.endMonth) setEndMonth(state.endMonth)
+        if (Array.isArray(state.items) && state.items.length) setItems(state.items)
+        setStorageError('')
+      })
+      .catch((error) => {
+        if (!ignore) setStorageError(error.message)
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false)
+      })
+    return () => {
+      ignore = true
+    }
+  }, [])
 
   const validRange = startMonth <= endMonth
   const months = useMemo(() => validRange ? monthRange(startMonth, endMonth) : [], [startMonth, endMonth, validRange])
@@ -422,9 +446,22 @@ function SavingsSimulator() {
     setSaved(false)
   }
 
-  function saveSimulation() {
-    localStorage.setItem(savingsStorageKey, JSON.stringify({ startMonth, endMonth, items, saved: true }))
-    setSaved(true)
+  async function saveSimulation() {
+    try {
+      setSavingSimulation(true)
+      const state = await api('savings', {
+        method: 'POST',
+        body: JSON.stringify({ startMonth, endMonth, items }),
+      })
+      localStorage.setItem(savingsStorageKey, JSON.stringify({ ...state, saved: true }))
+      setSaved(true)
+      setStorageError('')
+    } catch (error) {
+      setSaved(false)
+      setStorageError(error.message)
+    } finally {
+      setSavingSimulation(false)
+    }
   }
 
   return (
@@ -434,9 +471,11 @@ function SavingsSimulator() {
           <Title level={3}>Simulador de ahorro</Title>
           <Tag color="blue">Local</Tag>
         </Space>
-        <Button type="primary" onClick={saveSimulation}>Guardar simulación</Button>
+        <Button type="primary" loading={savingSimulation} onClick={saveSimulation}>Guardar simulación</Button>
       </Flex>
       <Card className="savings-card" variant="borderless">
+        {storageError && <Alert className="savings-alert" type="error" showIcon message="No se pudo acceder al almacenamiento persistente" description={storageError} />}
+        {loading && <Text type="secondary">Cargando simulación guardada...</Text>}
         <Row gutter={[12, 12]} align="bottom">
           <Col xs={24} sm={12} md={5}>
             <Text className="control-label">Desde</Text>

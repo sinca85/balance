@@ -2,8 +2,11 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import mongoose from 'mongoose'
+import { get, put } from '@vercel/blob'
 
 const localDbPath = path.join(process.cwd(), '.data', 'local-db.json')
+const localSavingsPath = path.join(process.cwd(), '.data', 'savings-simulation.json')
+const savingsBlobPath = 'balance/savings-simulation.json'
 const expenseCategories = ['general', 'vivienda', 'comida', 'transporte', 'hijos', 'tarjeta', 'salud', 'ocio']
 
 let cached = global.mongooseConnection
@@ -89,6 +92,52 @@ async function readLocalDb() {
 async function writeLocalDb(db) {
   await fs.mkdir(path.dirname(localDbPath), { recursive: true })
   await fs.writeFile(localDbPath, JSON.stringify(db, null, 2))
+}
+
+async function readSavingsState() {
+  if (process.env.VERCEL || process.env.BLOB_READ_WRITE_TOKEN) {
+    const blob = await get(savingsBlobPath, { access: 'private' })
+    if (!blob) return { startMonth: '', endMonth: '', items: [] }
+    return JSON.parse(await new Response(blob.stream).text())
+  }
+
+  try {
+    return JSON.parse(await fs.readFile(localSavingsPath, 'utf8'))
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+    return { startMonth: '', endMonth: '', items: [] }
+  }
+}
+
+async function writeSavingsState(state) {
+  const payload = JSON.stringify(state, null, 2)
+  if (process.env.VERCEL || process.env.BLOB_READ_WRITE_TOKEN) {
+    await put(savingsBlobPath, payload, {
+      access: 'private',
+      addRandomSuffix: false,
+      contentType: 'application/json',
+    })
+    return
+  }
+
+  await fs.mkdir(path.dirname(localSavingsPath), { recursive: true })
+  await fs.writeFile(localSavingsPath, payload)
+}
+
+async function savingsHandler(req, res) {
+  if (req.method === 'GET') return send(res, 200, await readSavingsState())
+  if (req.method === 'POST') {
+    const body = await readBody(req)
+    const state = {
+      startMonth: body.startMonth || '',
+      endMonth: body.endMonth || '',
+      items: Array.isArray(body.items) ? body.items : [],
+      updatedAt: new Date().toISOString(),
+    }
+    await writeSavingsState(state)
+    return send(res, 200, state)
+  }
+  return send(res, 405, { error: 'Method not allowed' })
 }
 
 function send(res, status, data) {
@@ -605,6 +654,7 @@ async function handler(req, res) {
     const id = parts[1]
 
     if (resource === 'health') return send(res, 200, { ok: true })
+    if (resource === 'savings') return await savingsHandler(req, res)
     if (!process.env.MONGODB_URI) {
       if (process.env.VERCEL) {
         return send(res, 500, {
