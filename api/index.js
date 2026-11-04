@@ -152,8 +152,16 @@ async function marketHistoryHandler(req, res, url) {
     return send(res, 400, { error: 'Símbolo o período inválido' })
   }
 
-  const start = Math.floor(Date.UTC(Number(startMonth.slice(0, 4)), Number(startMonth.slice(5, 7)) - 1, 1) / 1000)
-  const end = Math.floor(Date.UTC(Number(endMonth.slice(0, 4)), Number(endMonth.slice(5, 7)), 1) / 1000)
+  const requestedStartIndex = monthIndex(startMonth)
+  const requestedEndIndex = monthIndex(endMonth)
+  if (requestedEndIndex < requestedStartIndex) return send(res, 400, { error: 'El período es inválido' })
+  const periodLength = requestedEndIndex - requestedStartIndex + 1
+  const currentMonth = getMonth()
+  const currentIndex = monthIndex(currentMonth)
+  const historyEndMonth = requestedEndIndex <= currentIndex ? endMonth : currentMonth
+  const historyStartMonth = addMonths(historyEndMonth, -(periodLength - 1))
+  const start = Math.floor(Date.UTC(Number(historyStartMonth.slice(0, 4)), Number(historyStartMonth.slice(5, 7)) - 1, 1) / 1000)
+  const end = Math.floor(Date.UTC(Number(historyEndMonth.slice(0, 4)), Number(historyEndMonth.slice(5, 7)), 1) / 1000)
   const endpoint = `https://query1.finance.yahoo.com/v8/finance/chart/${asset.symbol}?period1=${start}&period2=${end}&interval=1d&events=history`
   const response = await fetch(endpoint, { headers: { 'User-Agent': 'balance-savings-simulator/1.0' } })
   if (!response.ok) throw new Error(`No se pudo consultar el historial de ${asset.name}`)
@@ -171,7 +179,14 @@ async function marketHistoryHandler(req, res, url) {
     finalPrice = close
   })
   if (!Object.keys(monthly).length) throw new Error(`No hay cotizaciones disponibles para ${asset.name}`)
-  return send(res, 200, { symbol: asset.symbol, name: asset.name, prices: monthly, finalPrice })
+  const historicalMonths = Object.keys(monthly).sort()
+  const prices = Object.fromEntries(
+    Array.from({ length: periodLength }, (_, index) => [
+      addMonths(startMonth, index),
+      monthly[historicalMonths[index]] || monthly[historicalMonths.at(-1)],
+    ])
+  )
+  return send(res, 200, { symbol: asset.symbol, name: asset.name, prices, finalPrice })
 }
 
 function send(res, status, data) {
