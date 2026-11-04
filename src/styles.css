@@ -264,7 +264,8 @@ main {
 }
 
 .savings-table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
   font-size: 13px;
 }
@@ -286,6 +287,30 @@ main {
   color: #53606d;
   font-size: 11px;
   text-transform: uppercase;
+}
+
+.savings-table .savings-method-heading,
+.savings-table .savings-total-heading {
+  text-align: center;
+  border-left: 1px solid #e1e6ed;
+}
+
+.savings-table .savings-total-heading {
+  background: #f3f6fa;
+}
+
+.savings-table tr > :nth-child(2),
+.savings-table tr > :nth-child(5),
+.savings-table tr > :nth-child(8),
+.savings-table tr > :nth-child(11),
+.savings-table tr > :nth-child(14) {
+  border-left: 1px solid #e1e6ed;
+}
+
+.savings-table-total-row td {
+  border-top: 2px solid #dce3eb;
+  background: #f8fafc;
+  font-weight: 600;
 }
 
 .savings-saved {

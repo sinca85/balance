@@ -431,6 +431,12 @@ function SavingsSimulator() {
   const totalContributions = totals.reduce((sum, row) => sum + row.contribution, 0)
   const totalInterest = finalTotal - totalContributions
 
+  const methodTotals = useMemo(() => schedules.map(({ item, rows }) => {
+    const contributions = rows.reduce((sum, row) => sum + row.contribution, 0)
+    const interest = rows.reduce((sum, row) => sum + row.interest, 0)
+    return { item, contributions, interest, balance: rows.at(-1)?.balance || 0 }
+  }), [schedules])
+
   function updateItem(id, patch) {
     setItems((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item))
     setSaved(false)
@@ -535,8 +541,50 @@ function SavingsSimulator() {
             </Row>
             <div className="savings-table-wrap">
               <table className="savings-table">
-                <thead><tr><th>Mes</th><th>Aportes</th><th>Intereses</th><th>Saldo acumulado</th></tr></thead>
-                <tbody>{totals.map((row) => <tr key={row.month}><td>{dayjs(`${row.month}-01`).format('MMM YYYY')}</td><td>{formatSavingsNumber(row.contribution)}</td><td>{formatSavingsNumber(row.interest)}</td><td><strong>{formatSavingsNumber(row.balance)}</strong></td></tr>)}</tbody>
+                <thead>
+                  <tr>
+                    <th rowSpan="2">Mes</th>
+                    {schedules.map(({ item }) => <th key={item.id} colSpan="3" className="savings-method-heading">{item.name || 'Sin nombre'}</th>)}
+                    <th colSpan="3" className="savings-total-heading">Total</th>
+                  </tr>
+                  <tr>
+                    {schedules.flatMap(({ item }) => [
+                      <th key={`${item.id}-contribution`}>Aporte</th>,
+                      <th key={`${item.id}-interest`}>Interés</th>,
+                      <th key={`${item.id}-balance`}>Acumulado</th>,
+                    ])}
+                    <th>Aportes</th><th>Interés</th><th>Acumulado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {totals.map((row, index) => (
+                    <tr key={row.month}>
+                      <td>{dayjs(`${row.month}-01`).format('MMM YYYY')}</td>
+                      {schedules.flatMap(({ item, rows }) => {
+                        const methodRow = rows[index]
+                        return [
+                          <td key={`${item.id}-${row.month}-contribution`}>{formatSavingsNumber(methodRow?.contribution)}</td>,
+                          <td key={`${item.id}-${row.month}-interest`}>{formatSavingsNumber(methodRow?.interest)}</td>,
+                          <td key={`${item.id}-${row.month}-balance`}><strong>{formatSavingsNumber(methodRow?.balance)}</strong></td>,
+                        ]
+                      })}
+                      <td>{formatSavingsNumber(row.contribution)}</td>
+                      <td>{formatSavingsNumber(row.interest)}</td>
+                      <td><strong>{formatSavingsNumber(row.balance)}</strong></td>
+                    </tr>
+                  ))}
+                  <tr className="savings-table-total-row">
+                    <td>Total período</td>
+                    {methodTotals.flatMap(({ item, contributions, interest, balance }) => [
+                      <td key={`${item.id}-total-contribution`}>{formatSavingsNumber(contributions)}</td>,
+                      <td key={`${item.id}-total-interest`}>{formatSavingsNumber(interest)}</td>,
+                      <td key={`${item.id}-total-balance`}><strong>{formatSavingsNumber(balance)}</strong></td>,
+                    ])}
+                    <td>{formatSavingsNumber(totalContributions)}</td>
+                    <td>{formatSavingsNumber(totalInterest)}</td>
+                    <td><strong>{formatSavingsNumber(finalTotal)}</strong></td>
+                  </tr>
+                </tbody>
               </table>
             </div>
           </>
